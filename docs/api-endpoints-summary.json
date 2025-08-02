@@ -1,0 +1,91 @@
+{
+  "apiEndpoints": {
+    "authentication": ["POST /api/auth/login", "POST /api/auth/logout", "GET /api/auth/me"],
+    "userManagement": [
+      "GET /api/users",
+      "GET /api/users/:id",
+      "POST /api/users",
+      "PUT /api/users/:id",
+      "DELETE /api/users/:id"
+    ],
+    "phoneManagement": [
+      "GET /api/phones",
+      "GET /api/phones/:id",
+      "POST /api/phones",
+      "PUT /api/phones/:id",
+      "DELETE /api/phones/:id",
+      "GET /api/phones/:id/usage-stats",
+      "GET /api/phones/:id/maintenance-history"
+    ],
+    "simCardManagement": [
+      "GET /api/sim-cards",
+      "GET /api/sim-cards/:id",
+      "POST /api/sim-cards",
+      "PUT /api/sim-cards/:id",
+      "DELETE /api/sim-cards/:id"
+    ],
+    "attributionManagement": [
+      "GET /api/attributions",
+      "GET /api/attributions/:id",
+      "POST /api/attributions",
+      "PUT /api/attributions/:id",
+      "DELETE /api/attributions/:id",
+      "POST /api/attributions/:id/return",
+      "GET /api/attributions/history/:simCardId"
+    ],
+    "requestManagement": [
+      "GET /api/requests",
+      "GET /api/requests/:id",
+      "POST /api/requests",
+      "PUT /api/requests/:id",
+      "POST /api/requests/:id/comments",
+      "DELETE /api/requests/:id"
+    ],
+    "notificationManagement": [
+      "GET /api/notifications",
+      "PUT /api/notifications/:id/read",
+      "PUT /api/notifications/mark-all-read",
+      "DELETE /api/notifications/:id",
+      "DELETE /api/notifications/clear-all",
+      "POST /api/notifications"
+    ],
+    "calendarEvents": [
+      "GET /api/events",
+      "GET /api/events/:id",
+      "POST /api/events",
+      "PUT /api/events/:id",
+      "DELETE /api/events/:id"
+    ],
+    "messages": [
+      "GET /api/conversations",
+      "GET /api/conversations/:id/messages",
+      "POST /api/conversations/:id/messages",
+      "PUT /api/messages/:id/read",
+      "PUT /api/messages/:id/star"
+    ],
+    "dashboardAnalytics": [
+      "GET /api/dashboard/stats",
+      "GET /api/dashboard/recent-activity",
+      "GET /api/dashboard/charts/:type"
+    ],
+    "settings": [
+      "GET /api/settings",
+      "PUT /api/settings",
+      "PUT /api/settings/password",
+      "GET /api/settings/export-data",
+      "DELETE /api/settings/delete-account"
+    ],
+    "fileUpload": ["POST /api/upload/avatar", "POST /api/upload/attachment"]
+  },
+  "totalEndpoints": 52,
+  "authenticationRequired": true,
+  "roleBasedAccess": {
+    "admin": "Full access to all endpoints",
+    "assigner": "Limited admin access - cannot manage users or system settings",
+    "user": "Read own data, create requests, view assigned equipment"
+  },
+  "realTimeFeatures": {
+    "websocket": "/api/ws",
+    "events": ["notification:new", "request:updated", "message:new", "attribution:created", "phone:status_changed"]
+  }
+}

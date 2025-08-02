@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebSocket Chat Test</title>
+    <script src="https://cdn.jsdelivr.net/npm/sockjs-client@1/dist/sockjs.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@stomp/stompjs@7.1.1/bundles/stomp.umd.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+        .panel {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .status {
+            padding: 10px;
+            border-radius: 4px;
+            margin-bottom: 20px;
+            font-weight: bold;
+        }
+        .status.connected { background-color: #d4edda; color: #155724; }
+        .status.disconnected { background-color: #f8d7da; color: #721c24; }
+        .status.connecting { background-color: #fff3cd; color: #856404; }
+        
+        .form-group {
+            margin-bottom: 15px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        input, select, textarea {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+        button {
+            background-color: #007bff;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-right: 10px;
+            margin-bottom: 10px;
+        }
+        button:hover { background-color: #0056b3; }
+        button:disabled { background-color: #6c757d; cursor: not-allowed; }
+        
+        .messages {
+            height: 400px;
+            overflow-y: auto;
+            border: 1px solid #ddd;
+            padding: 10px;
+            background-color: #f8f9fa;
+            border-radius: 4px;
+        }
+        .message {
+            margin-bottom: 10px;
+            padding: 8px;
+            border-radius: 4px;
+        }
+        .message.sent { background-color: #d1ecf1; border-left: 4px solid #17a2b8; }
+        .message.received { background-color: #d4edda; border-left: 4px solid #28a745; }
+        .message.system { background-color: #fff3cd; border-left: 4px solid #ffc107; }
+        .message.error { background-color: #f8d7da; border-left: 4px solid #dc3545; }
+        
+        .timestamp {
+            font-size: 0.8em;
+            color: #666;
+        }
+        .sender {
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+        
+        .log {
+            height: 200px;
+            overflow-y: auto;
+            background-color: #000;
+            color: #00ff00;
+            padding: 10px;
+            font-family: monospace;
+            font-size: 12px;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body>
+    <h1>WebSocket Chat Test</h1>
+    
+    <div class="container">
+        <!-- Connection Panel -->
+        <div class="panel">
+            <h2>Connection</h2>
+            <div id="status" class="status disconnected">Disconnected</div>
+            
+            <div class="form-group">
+                <label for="username">Username:</label>
+                <input type="text" id="username" placeholder="Enter your username" value="TestUser">
+            </div>
+            
+            <div class="form-group">
+                <label for="conversationId">Conversation ID:</label>
+                <input type="number" id="conversationId" placeholder="Enter conversation ID" value="1">
+            </div>
+            
+            <button id="connectBtn" onclick="connect()">Connect</button>
+            <button id="disconnectBtn" onclick="disconnect()" disabled>Disconnect</button>
+            <button id="joinBtn" onclick="joinConversation()" disabled>Join Conversation</button>
+        </div>
+        
+        <!-- Message Panel -->
+        <div class="panel">
+            <h2>Send Message</h2>
+            <div class="form-group">
+                <label for="messageContent">Message:</label>
+                <textarea id="messageContent" rows="3" placeholder="Type your message here..."></textarea>
+            </div>
+            
+            <button id="sendBtn" onclick="sendMessage()" disabled>Send Message</button>
+            <button onclick="sendTestMessage()" disabled>Send Test Message</button>
+        </div>
+    </div>
+    
+    <!-- Messages Display -->
+    <div class="panel" style="margin-top: 20px;">
+        <h2>Messages</h2>
+        <div id="messages" class="messages"></div>
+    </div>
+    
+    <!-- Debug Log -->
+    <div class="panel" style="margin-top: 20px;">
+        <h2>Debug Log</h2>
+        <div id="log" class="log"></div>
+    </div>
+
+    <script>
+        let stompClient = null;
+        let isConnected = false;
+        
+        function log(message, type = 'info') {
+            const logDiv = document.getElementById('log');
+            const timestamp = new Date().toLocaleTimeString();
+            const logEntry = document.createElement('div');
+            logEntry.innerHTML = `[${timestamp}] ${message}`;
+            logDiv.appendChild(logEntry);
+            logDiv.scrollTop = logDiv.scrollHeight;
+            console.log(message);
+        }
+        
+        function updateStatus(status, className) {
+            const statusDiv = document.getElementById('status');
+            statusDiv.textContent = status;
+            statusDiv.className = `status ${className}`;
+        }
+        
+        function updateButtons() {
+            document.getElementById('connectBtn').disabled = isConnected;
+            document.getElementById('disconnectBtn').disabled = !isConnected;
+            document.getElementById('joinBtn').disabled = !isConnected;
+            document.getElementById('sendBtn').disabled = !isConnected;
+            document.querySelector('button[onclick="sendTestMessage()"]').disabled = !isConnected;
+        }
+        
+        function addMessage(content, sender, type = 'received', timestamp = new Date()) {
+            const messagesDiv = document.getElementById('messages');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${type}`;
+            
+            const timeStr = timestamp instanceof Date ? timestamp.toLocaleTimeString() : timestamp;
+            
+            messageDiv.innerHTML = `
+                <div class="sender">${sender}</div>
+                <div class="content">${content}</div>
+                <div class="timestamp">${timeStr}</div>
+            `;
+            
+            messagesDiv.appendChild(messageDiv);
+            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+        }
+        
+        function connect() {
+            const username = document.getElementById('username').value.trim();
+            if (!username) {
+                alert('Please enter a username');
+                return;
+            }
+            
+            updateStatus('Connecting...', 'connecting');
+            log('Attempting to connect to WebSocket...');
+            
+            try {
+                const socket = new SockJS('http://localhost:8080/api/ws');
+                stompClient = StompJs.Stomp.over(socket);
+                
+                // Disable debug logging in production
+                stompClient.debug = null;
+                
+                stompClient.connect({}, function (frame) {
+                    log('Connected to WebSocket: ' + frame);
+                    updateStatus('Connected', 'connected');
+                    isConnected = true;
+                    updateButtons();
+                    
+                    // Subscribe to general messages
+                    stompClient.subscribe('/topic/messages', function (message) {
+                        log('Received general message: ' + message.body);
+                        const body = JSON.parse(message.body);
+                        addMessage(body.content, body.senderName || 'Unknown', 'received', body.sentAt);
+                    });
+                    
+                    // Subscribe to conversation-specific messages
+                    const conversationId = document.getElementById('conversationId').value;
+                    if (conversationId) {
+                        stompClient.subscribe(`/topic/conversation/${conversationId}`, function (message) {
+                            log('Received conversation message: ' + message.body);
+                            const body = JSON.parse(message.body);
+                            addMessage(body.content, body.senderName || 'Unknown', 'received', body.sentAt);
+                        });
+                    }
+                    
+                    // Subscribe to user-specific messages
+                    stompClient.subscribe('/user/queue/messages', function (message) {
+                        log('Received user message: ' + message.body);
+                        const body = JSON.parse(message.body);
+                        addMessage(body.content, body.senderName || 'System', 'system', body.sentAt);
+                    });
+                    
+                    // Send join message
+                    stompClient.send("/app/join", {}, JSON.stringify({
+                        senderName: username,
+                        content: username + " joined the chat",
+                        type: "JOIN"
+                    }));
+                    
+                }, function (error) {
+                    log('WebSocket connection error: ' + error, 'error');
+                    updateStatus('Connection Failed', 'disconnected');
+                    isConnected = false;
+                    updateButtons();
+                });
+                
+            } catch (error) {
+                log('Error creating WebSocket connection: ' + error, 'error');
+                updateStatus('Connection Failed', 'disconnected');
+                isConnected = false;
+                updateButtons();
+            }
+        }
+        
+        function disconnect() {
+            if (stompClient) {
+                stompClient.disconnect(function () {
+                    log('Disconnected from WebSocket');
+                    updateStatus('Disconnected', 'disconnected');
+                    isConnected = false;
+                    updateButtons();
+                });
+            }
+        }
+        
+        function joinConversation() {
+            if (!stompClient || !isConnected) {
+                alert('Not connected to WebSocket');
+                return;
+            }
+            
+            const conversationId = document.getElementById('conversationId').value;
+            if (!conversationId) {
+                alert('Please enter a conversation ID');
+                return;
+            }
+            
+            log('Joining conversation: ' + conversationId);
+            
+            stompClient.send("/app/join-conversation", {}, JSON.stringify({
+                conversationId: parseInt(conversationId)
+            }));
+        }
+        
+        function sendMessage() {
+            if (!stompClient || !isConnected) {
+                alert('Not connected to WebSocket');
+                return;
+            }
+            
+            const content = document.getElementById('messageContent').value.trim();
+            if (!content) {
+                alert('Please enter a message');
+                return;
+            }
+            
+            const username = document.getElementById('username').value.trim();
+            const conversationId = document.getElementById('conversationId').value;
+            
+            const message = {
+                content: content,
+                senderName: username,
+                conversationId: conversationId ? parseInt(conversationId) : null,
+                sentAt: new Date().toISOString(),
+                type: "MESSAGE"
+            };
+            
+            log('Sending message: ' + JSON.stringify(message));
+            
+            stompClient.send("/app/message", {}, JSON.stringify(message));
+            
+            // Add message to local display
+            addMessage(content, username, 'sent');
+            
+            // Clear input
+            document.getElementById('messageContent').value = '';
+        }
+        
+        function sendTestMessage() {
+            const testMessages = [
+                "Hello! How can I help you today?",
+                "This is a test message from the WebSocket test page",
+                "Your request has been processed successfully",
+                "Please provide more details about your issue",
+                "Thank you for contacting support"
+            ];
+            
+            const randomMessage = testMessages[Math.floor(Math.random() * testMessages.length)];
+            document.getElementById('messageContent').value = randomMessage;
+            sendMessage();
+        }
+        
+        // Handle Enter key in message input
+        document.getElementById('messageContent').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                sendMessage();
+            }
+        });
+        
+        // Initialize
+        log('WebSocket test page loaded');
+        updateButtons();
+    </script>
+</body>
+</html> 
