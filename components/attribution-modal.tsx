@@ -26,7 +26,7 @@ interface Attribution {
   assignedBy: string
   assignmentDate: string
   returnDate?: string
-  status: "active" | "returned" | "pending"
+  status: "ACTIVE" | "RETURNED" | "PENDING"
   notes?: string
 }
 
@@ -39,7 +39,7 @@ interface AttributionModalProps {
 
 export function AttributionModal({ isOpen, onClose, onSave, attribution }: AttributionModalProps) {
   const [formData, setFormData] = useState<Partial<Attribution>>({
-    status: "active",
+    status: "ACTIVE",
     assignmentDate: new Date().toISOString().split("T")[0],
   })
   const [users, setUsers] = useState<any[]>([]);
@@ -70,7 +70,7 @@ export function AttributionModal({ isOpen, onClose, onSave, attribution }: Attri
       }
     } else {
       setFormData({
-        status: "active",
+        status: "ACTIVE",
         assignmentDate: new Date().toISOString().split("T")[0],
       })
       setUserSearch("");
@@ -161,7 +161,7 @@ export function AttributionModal({ isOpen, onClose, onSave, attribution }: Attri
           phoneId,
           phoneModel: selectedPhone.model,
         }))
-        setPhoneSearch(`${selectedPhone.brand || ''} ${selectedPhone.model || ''} ${selectedPhone.storage || ''}${selectedPhone.storage ? ' ' : ''}${selectedPhone.color || ''}`.trim());
+        setPhoneSearch(`${selectedPhone.brand || ''} ${selectedPhone.model || ''} ${selectedPhone.storage || ''}${selectedPhone.storage ? ' ' : ''}${selectedPhone.color ? `(${selectedPhone.color})` : ''}`.trim());
         setShowPhoneSuggestions(false);
         setSelectedPhoneIndex(-1);
       }
@@ -263,7 +263,9 @@ export function AttributionModal({ isOpen, onClose, onSave, attribution }: Attri
   // Highlight search term in text
   const highlightText = (text: string, searchTerm: string) => {
     if (!searchTerm) return text;
-    const regex = new RegExp(`(${searchTerm})`, 'gi');
+    // Escape special regex characters to prevent "nothing to repeat" error
+    const escapedSearchTerm = searchTerm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const regex = new RegExp(`(${escapedSearchTerm})`, 'gi');
     return text.replace(regex, '<mark class="bg-yellow-200">$1</mark>');
   };
 
@@ -335,14 +337,14 @@ export function AttributionModal({ isOpen, onClose, onSave, attribution }: Attri
 
             <div className="space-y-2">
               <Label htmlFor="status">Statut</Label>
-              <Select value={formData.status || "active"} onValueChange={(value) => handleChange("status", value)}>
+              <Select value={formData.status || "ACTIVE"} onValueChange={(value) => handleChange("status", value)}>
                 <SelectTrigger>
                   <SelectValue placeholder="Sélectionner un statut" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="active">Actif</SelectItem>
-                  <SelectItem value="pending">En attente</SelectItem>
-                  <SelectItem value="returned">Retourné</SelectItem>
+                  <SelectItem value="ACTIVE">Actif</SelectItem>
+                  <SelectItem value="PENDING">En attente</SelectItem>
+                  <SelectItem value="RETURNED">Retourné</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -403,7 +405,7 @@ export function AttributionModal({ isOpen, onClose, onSave, attribution }: Attri
                               )}
                               {phone.color && (
                                 <span className="bg-purple-100 text-purple-800 text-xs px-2 py-1 rounded font-medium">
-                                  {phone.color}
+                                  🎨 {phone.color}
                                 </span>
                               )}
                               {phone.status && (
@@ -414,18 +416,9 @@ export function AttributionModal({ isOpen, onClose, onSave, attribution }: Attri
                             </div>
                             <div className="text-xs text-gray-400">
                               {phone.imei && `IMEI: ${phone.imei}`}
-                              {phone.color && phone.imei && ' • '}
-                              {phone.color && `Color: ${phone.color}`}
-                              {phone.serialNumber && (phone.imei || phone.color) && ' • '}
+                              {phone.serialNumber && phone.imei && ' • '}
                               {phone.serialNumber && `S/N: ${phone.serialNumber}`}
                             </div>
-                            {phone.color && (
-                              <div className="text-xs">
-                                <span className="bg-purple-100 text-purple-800 px-2 py-1 rounded font-medium">
-                                  🎨 {phone.color}
-                                </span>
-                              </div>
-                            )}
                             {phone.condition && (
                               <div className="text-xs">
                                 <span className={`px-2 py-1 rounded ${
@@ -523,7 +516,7 @@ export function AttributionModal({ isOpen, onClose, onSave, attribution }: Attri
               />
             </div>
 
-            {formData.status === "returned" && (
+                                 {formData.status === "RETURNED" && (
               <div className="space-y-2">
                 <Label htmlFor="returnDate">Date de retour</Label>
                 <Input

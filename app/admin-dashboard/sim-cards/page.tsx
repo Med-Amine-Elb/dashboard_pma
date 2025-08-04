@@ -20,7 +20,7 @@ interface SimCard {
   number: string
   carrier: string
   plan: string
-  status: "available" | "assigned" | "suspended" | "expired"
+  status: "AVAILABLE" | "ASSIGNED" | "LOST" | "BLOCKED"
   activationDate: string
   expiryDate: string
   monthlyFee: number
@@ -55,6 +55,8 @@ export default function SimCardsPage() {
   const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false)
   const [selectedSim, setSelectedSim] = useState<SimCard | null>(null)
   const [selectedSimHistory, setSelectedSimHistory] = useState<AssignmentHistory[]>([])
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false)
+  const [simToDelete, setSimToDelete] = useState<SimCard | null>(null)
   const { toast } = useToast()
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -82,11 +84,32 @@ export default function SimCardsPage() {
     setError(null)
     try {
       const token = localStorage.getItem("jwt_token")
-      console.log("SIM fetch: token", token)
+      console.log("Stored JWT token:", token ? token.substring(0, 50) + "..." : "No token found")
+      
+      if (!token) {
+        setError("Token d'authentification manquant")
+        return
+      }
+
+      // Decode JWT token to check its content
+      try {
+        const payload = JSON.parse(atob(token.split('.')[1]))
+        console.log("JWT Token payload:", payload)
+        console.log("Token expiration:", new Date(payload.exp * 1000))
+        console.log("Token is expired:", Date.now() > payload.exp * 1000)
+      } catch (e) {
+        console.error("Error decoding JWT token:", e)
+      }
+
       const api = new SIMCardManagementApi(getApiConfig(token))
-      console.log("SIM fetch: api config", getApiConfig(token))
+      console.log("API config:", getApiConfig(token))
+      console.log("Fetching SIM cards...")
+      
       const res = await api.getSimCards()
-      console.log("SIM fetch: API response", res)
+      console.log("API Response:", res)
+      console.log("Response data:", res.data)
+      console.log("Response status:", res.status)
+      
       // Correctly extract sim cards from backend response (use 'simcards' lowercase)
       let apiSimCards: any[] = [];
       if (Array.isArray(res.data)) {
@@ -103,27 +126,34 @@ export default function SimCardsPage() {
       ) {
         apiSimCards = (res.data as any).simcards;
       }
-      console.log("SIM fetch: processed sim cards", apiSimCards)
-      setSimCards(
-        (Array.isArray(apiSimCards) ? apiSimCards : []).map((s: any) => ({
-          id: String(s.id),
-          number: s.number,
-          carrier: s.carrier || "",
-          plan: s.plan || "",
-          status: (s.status || "available").toLowerCase(),
-          activationDate: s.activationDate || "",
-          expiryDate: s.expiryDate || "",
-          monthlyFee: s.monthlyFee || 0,
-          dataLimit: s.dataLimit || "",
-          iccid: s.iccid || "",
-          pin: s.pin || "",
-          puk: s.puk || "",
-          notes: s.notes || "",
-        }))
-      )
-    } catch (err) {
-      console.error("SIM fetch: error", err)
-      setError("Erreur lors du chargement des cartes SIM.")
+      
+      console.log("Processed SIM cards:", apiSimCards)
+      
+      const mappedSimCards = (Array.isArray(apiSimCards) ? apiSimCards : []).map((s: any) => ({
+        id: String(s.id),
+        number: s.number,
+        carrier: s.carrier || "",
+        plan: s.plan || "",
+        status: (s.status || "AVAILABLE").toUpperCase(),
+        activationDate: s.activationDate || "",
+        expiryDate: s.expiryDate || "",
+        monthlyFee: s.monthlyFee || 0,
+        dataLimit: s.dataLimit || "",
+        iccid: s.iccid || "",
+        pin: s.pin || "",
+        puk: s.puk || "",
+        notes: s.notes || "",
+      }))
+      
+      console.log("Mapped SIM cards:", mappedSimCards)
+      setSimCards(mappedSimCards)
+      
+    } catch (err: any) {
+      console.error("Error fetching SIM cards:", err)
+      console.error("Error response:", err.response)
+      console.error("Error status:", err.response?.status)
+      console.error("Error data:", err.response?.data)
+      setError(err.response?.data?.message || "Erreur lors du chargement des cartes SIM.")
     } finally {
       setLoading(false)
     }
@@ -194,12 +224,78 @@ export default function SimCardsPage() {
     setIsSimModalOpen(true)
   }
 
-  const handleDeleteSim = (simId: string) => {
-    setSimCards(simCards.filter((sim) => sim.id !== simId))
-    toast({
-      title: "Carte SIM supprimée",
-      description: "La carte SIM a été supprimée avec succès.",
-    })
+  const handleDeleteSim = async (simId: string, event?: React.MouseEvent) => {
+    // Prevent the row click event from triggering
+    if (event) {
+      event.stopPropagation()
+    }
+    
+    // Find the sim card to delete
+    const sim = simCards.find(s => s.id === simId)
+    if (!sim) {
+      toast({
+        title: "Erreur",
+        description: "Carte SIM non trouvée",
+        variant: "destructive",
+      })
+      return
+    }
+    
+    // Show delete confirmation modal
+    setSimToDelete(sim)
+    setIsDeleteModalOpen(true)
+  }
+
+  const confirmDelete = async () => {
+    if (!simToDelete) return
+    
+    try {
+      const token = localStorage.getItem("jwt_token")
+      if (!token) {
+        toast({
+          title: "Erreur",
+          description: "Token d'authentification manquant",
+          variant: "destructive",
+        })
+        return
+      }
+
+      const simApi = new SIMCardManagementApi(getApiConfig(token))
+      await simApi.deleteSimCard(simToDelete.id)
+      
+      toast({
+        title: "Carte SIM supprimée",
+        description: "La carte SIM a été supprimée avec succès.",
+      })
+      
+      // Refresh the sim cards list from the backend
+      await fetchSimCards()
+      
+    } catch (err: any) {
+      console.error("Error deleting sim card:", err)
+      
+      // Handle specific error cases
+      let errorMessage = "Erreur lors de la suppression de la carte SIM"
+      
+      if (err.response?.status === 404) {
+        errorMessage = "Carte SIM non trouvée"
+      } else if (err.response?.status === 403) {
+        errorMessage = "Vous n'avez pas les permissions pour supprimer cette carte SIM"
+      } else if (err.response?.status === 409) {
+        errorMessage = "Impossible de supprimer cette carte SIM car elle est associée à d'autres données"
+      } else if (err.response?.data?.message) {
+        errorMessage = err.response.data.message
+      }
+      
+      toast({
+        title: "Erreur",
+        description: errorMessage,
+        variant: "destructive",
+      })
+    } finally {
+      setIsDeleteModalOpen(false)
+      setSimToDelete(null)
+    }
   }
 
   const handleViewHistory = (sim: SimCard) => {
@@ -208,37 +304,68 @@ export default function SimCardsPage() {
     setIsHistoryModalOpen(true)
   }
 
-  const handleSaveSim = (simData: Partial<SimCard>) => {
-    if (selectedSim) {
-      setSimCards(simCards.map((sim) => (sim.id === selectedSim.id ? { ...sim, ...simData } : sim)))
-      toast({
-        title: "Carte SIM modifiée",
-        description: "Les informations de la carte SIM ont été mises à jour.",
-      })
-    } else {
-      const newSim: SimCard = {
-        id: Date.now().toString(),
+  const handleSaveSim = async (simData: Partial<SimCard>) => {
+    try {
+      // Validation
+      const errors: string[] = [];
+      if (!simData.number || simData.number.trim() === "") errors.push("Le numéro de téléphone est obligatoire");
+      if (!simData.carrier || simData.carrier.trim() === "") errors.push("L'opérateur est obligatoire");
+      if (!simData.plan || simData.plan.trim() === "") errors.push("Le forfait est obligatoire");
+      if (!simData.iccid || simData.iccid.trim() === "") errors.push("L'ICCID est obligatoire");
+      if (!simData.pin || simData.pin.trim() === "") errors.push("Le PIN est obligatoire");
+      if (!simData.puk || simData.puk.trim() === "") errors.push("Le PUK est obligatoire");
+      if (!simData.status) errors.push("Le statut est obligatoire");
+      if (!simData.activationDate) errors.push("La date d'activation est obligatoire");
+      if (simData.monthlyFee !== undefined && simData.monthlyFee < 0) errors.push("Le coût mensuel ne peut pas être négatif");
+      if (errors.length > 0) {
+        toast({ title: "Erreur de validation", description: errors.join(", "), variant: "destructive" });
+        return;
+      }
+      const token = localStorage.getItem("jwt_token");
+      if (!token) {
+        toast({ title: "Erreur", description: "Token d'authentification manquant", variant: "destructive" });
+        return;
+      }
+      const simApi = new SIMCardManagementApi(getApiConfig(token));
+      const payload = {
         number: simData.number || "",
         carrier: simData.carrier || "",
         plan: simData.plan || "",
-        status: simData.status || "available",
-        activationDate: simData.activationDate || new Date().toISOString().split("T")[0],
+        status: simData.status || "AVAILABLE",
+        activationDate: simData.activationDate || "",
         expiryDate: simData.expiryDate || "",
-        monthlyFee: simData.monthlyFee || 0,
+        monthlyFee: simData.monthlyFee !== undefined ? Number(simData.monthlyFee) : 0,
         dataLimit: simData.dataLimit || "",
         iccid: simData.iccid || "",
         pin: simData.pin || "",
         puk: simData.puk || "",
-        notes: simData.notes,
+        poke: "", // Add empty poke field to avoid validation error
+        notes: simData.notes || "",
+      };
+      console.log("Sending SIM card payload:", payload);
+      if (selectedSim) {
+        await simApi.updateSimCard(Number(selectedSim.id), payload);
+        toast({ title: "Carte SIM modifiée", description: "Les informations de la carte SIM ont été mises à jour." });
+      } else {
+        await simApi.createSimCard(payload);
+        toast({ title: "Carte SIM ajoutée", description: "La nouvelle carte SIM a été ajoutée avec succès." });
       }
-      setSimCards([...simCards, newSim])
-      toast({
-        title: "Carte SIM ajoutée",
-        description: "La nouvelle carte SIM a été ajoutée avec succès.",
-      })
+      await fetchSimCards();
+      setIsSimModalOpen(false);
+    } catch (err: any) {
+      console.error("Error saving sim card:", err);
+      let errorMessage = "Erreur lors de la sauvegarde de la carte SIM";
+      if (err.response?.status === 400) {
+        const errorData = err.response?.data;
+        if (errorData?.error?.message) errorMessage = errorData.error.message;
+        else if (errorData?.message) errorMessage = errorData.message;
+      } else if (err.response?.status === 409) errorMessage = "Une carte SIM avec ce numéro existe déjà";
+      else if (err.response?.status === 403) errorMessage = "Vous n'avez pas les permissions pour effectuer cette action";
+      else if (err.response?.status === 404) errorMessage = "Carte SIM non trouvée";
+      else if (err.message?.includes("already exists")) errorMessage = "Une carte SIM avec ce numéro existe déjà";
+      toast({ title: "Erreur", description: errorMessage, variant: "destructive" });
     }
-    setIsSimModalOpen(false)
-  }
+  };
 
   const handleExport = () => {
     const csvContent = [
@@ -412,13 +539,12 @@ export default function SimCardsPage() {
                 <DataTable
                   data={filteredSimCards}
                   columns={simColumns}
-                  onRowClick={(sim) => handleEditSim(sim)}
                   renderCell={(sim, key) => {
                     if (key === "status") {
                       return <Badge className={getStatusColor(sim.status)}>{sim.status}</Badge>
                     }
                     if (key === "monthlyFee") {
-                      return <span>€{sim.monthlyFee}</span>
+                      return <span>{sim.monthlyFee} MAD</span>
                     }
                     if (key === "expiryDate") {
                       const isExpired = new Date(sim.expiryDate) < new Date()
@@ -431,17 +557,31 @@ export default function SimCardsPage() {
                     if (key === "actions") {
                       return (
                         <div className="flex items-center space-x-2">
-                          <Button size="sm" variant="outline" onClick={() => handleViewHistory(sim)}>
+                          <Button 
+                            size="sm" 
+                            variant="outline" 
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              handleViewHistory(sim)
+                            }}
+                          >
                             <History className="h-4 w-4" />
                           </Button>
-                          <Button size="sm" variant="outline" onClick={() => handleEditSim(sim)}>
+                          <Button 
+                            size="sm" 
+                            variant="outline" 
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              handleEditSim(sim)
+                            }}
+                          >
                             <Edit className="h-4 w-4" />
                           </Button>
                           <Button
                             size="sm"
                             variant="outline"
-                            onClick={() => handleDeleteSim(sim.id)}
-                            className="text-red-600 hover:text-red-700"
+                            onClick={(e) => handleDeleteSim(sim.id, e)}
+                            className="text-red-600 hover:text-red-700 hover:bg-red-50"
                           >
                             <Trash2 className="h-4 w-4" />
                           </Button>
@@ -470,6 +610,53 @@ export default function SimCardsPage() {
         onClose={() => setIsHistoryModalOpen(false)}
         history={selectedSimHistory}
       />
+
+      {/* Delete Confirmation Modal */}
+      {isDeleteModalOpen && simToDelete && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full mx-4 p-6">
+            <div className="flex items-center space-x-3 mb-4">
+              <div className="bg-red-100 p-3 rounded-xl">
+                <Trash2 className="h-6 w-6 text-red-600" />
+              </div>
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900">Confirmer la suppression</h3>
+                <p className="text-sm text-gray-600">Cette action est irréversible</p>
+              </div>
+            </div>
+            
+            <div className="mb-6">
+              <p className="text-gray-700 mb-2">
+                Êtes-vous sûr de vouloir supprimer la carte SIM :
+              </p>
+              <div className="bg-gray-50 rounded-lg p-3">
+                <p className="font-medium text-gray-900">{simToDelete.number}</p>
+                <p className="text-sm text-gray-600">{simToDelete.carrier} • {simToDelete.plan}</p>
+                <p className="text-sm text-gray-600">ICCID: {simToDelete.iccid}</p>
+              </div>
+            </div>
+            
+            <div className="flex space-x-3">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setIsDeleteModalOpen(false)
+                  setSimToDelete(null)
+                }}
+                className="flex-1"
+              >
+                Annuler
+              </Button>
+              <Button
+                onClick={confirmDelete}
+                className="flex-1 bg-red-600 hover:bg-red-700 text-white"
+              >
+                Supprimer
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

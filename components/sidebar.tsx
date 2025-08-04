@@ -41,7 +41,6 @@ export function Sidebar({ activeItem, onLogout }: SidebarProps) {
         { id: "sim-cards", label: "Cartes SIM", icon: CreditCard, href: "/admin-dashboard/sim-cards" },
         { id: "attributions", label: "Attributions", icon: LinkIcon, href: "/admin-dashboard/attributions" },
         { id: "calendar", label: "Planification", icon: Calendar, href: "/admin-dashboard/calendar" },
-        { id: "messages", label: "Messages", icon: MessageSquare, href: "/admin-dashboard/messages" },
       ]
     } else if (userRole === "assigner") {
       return [
@@ -61,14 +60,12 @@ export function Sidebar({ activeItem, onLogout }: SidebarProps) {
         { id: "users", label: "Utilisateurs", icon: Users, href: "/assigner-dashboard/users" },
         { id: "phones", label: "Téléphones", icon: Phone, href: "/assigner-dashboard/phones" },
         { id: "calendar", label: "Planification", icon: Calendar, href: "/assigner-dashboard/calendar" },
-        { id: "messages", label: "Messages", icon: MessageSquare, href: "/assigner-dashboard/messages" },
       ]
     } else {
       return [
         { id: "dashboard", label: "Dashboard", icon: LayoutDashboard, href: "/user-dashboard" },
         { id: "my-phone", label: "Mon Téléphone", icon: Phone, href: "/user-dashboard/my-phone" },
         { id: "requests", label: "Mes Demandes", icon: MessageSquare, href: "/user-dashboard/requests" },
-        { id: "messages", label: "Messages", icon: MessageSquare, href: "/user-dashboard/messages" },
       ]
     }
   }

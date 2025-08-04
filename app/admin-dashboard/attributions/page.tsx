@@ -26,7 +26,7 @@ interface Attribution {
   assignedBy: string
   assignmentDate: string
   returnDate?: string
-  status: "active" | "returned" | "pending"
+  status: "ACTIVE" | "RETURNED" | "PENDING"
   notes?: string
 }
 
@@ -38,6 +38,8 @@ export default function AttributionsPage() {
   const [statusFilter, setStatusFilter] = useState("all")
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [selectedAttribution, setSelectedAttribution] = useState<Attribution | null>(null)
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false)
+  const [attributionToDelete, setAttributionToDelete] = useState<Attribution | null>(null)
   const { toast } = useToast()
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -64,8 +66,32 @@ export default function AttributionsPage() {
     setError(null)
     try {
       const token = localStorage.getItem("jwt_token")
+      console.log("Stored JWT token:", token ? token.substring(0, 50) + "..." : "No token found")
+      
+      if (!token) {
+        setError("Token d'authentification manquant")
+        return
+      }
+
+      // Decode JWT token to check its content
+      try {
+        const payload = JSON.parse(atob(token.split('.')[1]))
+        console.log("JWT Token payload:", payload)
+        console.log("Token expiration:", new Date(payload.exp * 1000))
+        console.log("Token is expired:", Date.now() > payload.exp * 1000)
+      } catch (e) {
+        console.error("Error decoding JWT token:", e)
+      }
+
       const api = new AttributionManagementApi(getApiConfig(token))
+      console.log("API config:", getApiConfig(token))
+      console.log("Fetching attributions...")
+      
       const res = await api.getAttributions()
+      console.log("API Response:", res)
+      console.log("Response data:", res.data)
+      console.log("Response status:", res.status)
+      
       // Correctly extract attributions from backend response
       let apiAttributions: any[] = [];
       if (Array.isArray(res.data)) {
@@ -82,25 +108,34 @@ export default function AttributionsPage() {
       ) {
         apiAttributions = (res.data as any).attributions;
       }
-      setAttributions(
-        (Array.isArray(apiAttributions) ? apiAttributions : []).map((a: any) => ({
-          id: String(a.id),
-          userId: String(a.userId),
-          userName: a.userName || "",
-          userEmail: a.userEmail || "",
-          phoneId: a.phoneId ? String(a.phoneId) : undefined,
-          phoneModel: a.phoneModel || undefined,
-          simCardId: a.simCardId ? String(a.simCardId) : undefined,
-          simCardNumber: a.simCardNumber || undefined,
-          assignedBy: a.assignedByName || "",
-          assignmentDate: a.assignmentDate || "",
-          returnDate: a.returnDate || undefined,
-          status: (a.status || "active").toLowerCase(),
-          notes: a.notes || undefined,
-        }))
-      )
+      
+      console.log("Processed attributions:", apiAttributions)
+      
+      const mappedAttributions = (Array.isArray(apiAttributions) ? apiAttributions : []).map((a: any) => ({
+        id: String(a.id),
+        userId: String(a.userId),
+        userName: a.userName || "",
+        userEmail: a.userEmail || "",
+        phoneId: a.phoneId ? String(a.phoneId) : undefined,
+        phoneModel: a.phoneModel || undefined,
+        simCardId: a.simCardId ? String(a.simCardId) : undefined,
+        simCardNumber: a.simCardNumber || undefined,
+        assignedBy: a.assignedByName || "",
+        assignmentDate: a.assignmentDate || "",
+        returnDate: a.returnDate || undefined,
+        status: (a.status || "ACTIVE").toUpperCase(),
+        notes: a.notes || undefined,
+      }))
+      
+      console.log("Mapped attributions:", mappedAttributions)
+      setAttributions(mappedAttributions)
+      
     } catch (err: any) {
-      setError("Erreur lors du chargement des attributions.")
+      console.error("Error fetching attributions:", err)
+      console.error("Error response:", err.response)
+      console.error("Error status:", err.response?.status)
+      console.error("Error data:", err.response?.data)
+      setError(err.response?.data?.message || "Erreur lors du chargement des attributions.")
     } finally {
       setLoading(false)
     }
@@ -141,47 +176,196 @@ export default function AttributionsPage() {
     setIsModalOpen(true)
   }
 
-  const handleDeleteAttribution = (attributionId: string) => {
-    setAttributions(attributions.filter((attribution) => attribution.id !== attributionId))
-    toast({
-      title: "Attribution supprimée",
-      description: "L'attribution a été supprimée avec succès.",
-    })
+  const handleDeleteAttribution = async (attributionId: string, event?: React.MouseEvent) => {
+    // Prevent the row click event from triggering
+    if (event) {
+      event.stopPropagation()
+    }
+    
+    // Find the attribution to delete
+    const attribution = attributions.find(a => a.id === attributionId)
+    if (!attribution) {
+      toast({
+        title: "Erreur",
+        description: "Attribution non trouvée",
+        variant: "destructive",
+      })
+      return
+    }
+    
+    // Show delete confirmation modal
+    setAttributionToDelete(attribution)
+    setIsDeleteModalOpen(true)
   }
 
-  const handleSaveAttribution = (attributionData: Partial<Attribution>) => {
-    if (selectedAttribution) {
-      setAttributions(
-        attributions.map((attribution) =>
-          attribution.id === selectedAttribution.id ? { ...attribution, ...attributionData } : attribution,
-        ),
-      )
-      toast({
-        title: "Attribution modifiée",
-        description: "L'attribution a été mise à jour avec succès.",
-      })
-    } else {
-      const newAttribution: Attribution = {
-        id: Date.now().toString(),
-        userId: attributionData.userId || "",
-        userName: attributionData.userName || "",
-        userEmail: attributionData.userEmail || "",
-        phoneId: attributionData.phoneId,
-        phoneModel: attributionData.phoneModel,
-        simCardId: attributionData.simCardId,
-        simCardNumber: attributionData.simCardNumber,
-        assignedBy: "Randy Riley",
-        assignmentDate: attributionData.assignmentDate || new Date().toISOString().split("T")[0],
-        status: attributionData.status || "active",
-        notes: attributionData.notes,
+  const confirmDelete = async () => {
+    if (!attributionToDelete) return
+    
+    try {
+      const token = localStorage.getItem("jwt_token")
+      if (!token) {
+        toast({
+          title: "Erreur",
+          description: "Token d'authentification manquant",
+          variant: "destructive",
+        })
+        return
       }
-      setAttributions([...attributions, newAttribution])
+
+      const attributionApi = new AttributionManagementApi(getApiConfig(token))
+      await attributionApi.deleteAttribution(attributionToDelete.id)
+      
       toast({
-        title: "Attribution créée",
-        description: "La nouvelle attribution a été créée avec succès.",
+        title: "Attribution supprimée",
+        description: "L'attribution a été supprimée avec succès.",
+      })
+      
+      // Refresh the attributions list from the backend
+      await fetchAttributions()
+      
+    } catch (err: any) {
+      console.error("Error deleting attribution:", err)
+      
+      // Handle specific error cases
+      let errorMessage = "Erreur lors de la suppression de l'attribution"
+      
+      if (err.response?.status === 404) {
+        errorMessage = "Attribution non trouvée"
+      } else if (err.response?.status === 403) {
+        errorMessage = "Vous n'avez pas les permissions pour supprimer cette attribution"
+      } else if (err.response?.status === 409) {
+        errorMessage = "Impossible de supprimer cette attribution car elle est associée à d'autres données"
+      } else if (err.response?.data?.message) {
+        errorMessage = err.response.data.message
+      }
+      
+      toast({
+        title: "Erreur",
+        description: errorMessage,
+        variant: "destructive",
+      })
+    } finally {
+      setIsDeleteModalOpen(false)
+      setAttributionToDelete(null)
+    }
+  }
+
+  const handleSaveAttribution = async (attributionData: Partial<Attribution>) => {
+    try {
+      // Validation
+      const errors: string[] = []
+      
+      if (!attributionData.userId || (typeof attributionData.userId === 'string' && attributionData.userId.trim() === "") || (typeof attributionData.userId === 'number' && attributionData.userId <= 0)) {
+        errors.push("L'utilisateur est obligatoire")
+      }
+      
+      if (!attributionData.assignmentDate || (typeof attributionData.assignmentDate === 'string' && attributionData.assignmentDate.trim() === "")) {
+        errors.push("La date d'attribution est obligatoire")
+      }
+      
+      if (!attributionData.status || (typeof attributionData.status === 'string' && attributionData.status.trim() === "")) {
+        errors.push("Le statut est obligatoire")
+      }
+      
+      if (errors.length > 0) {
+        toast({
+          title: "Erreur de validation",
+          description: errors.join(", "),
+          variant: "destructive",
+        })
+        return
+      }
+
+      const token = localStorage.getItem("jwt_token")
+      if (!token) {
+        toast({
+          title: "Erreur",
+          description: "Token d'authentification manquant",
+          variant: "destructive",
+        })
+        return
+      }
+
+      const attributionApi = new AttributionManagementApi(getApiConfig(token))
+      
+      console.log("Attribution data being sent:", attributionData);
+      
+      if (selectedAttribution) {
+        // Update existing attribution
+        const updatePayload = {
+          userId: attributionData.userId ? Number(attributionData.userId) : undefined,
+          phoneId: attributionData.phoneId ? Number(attributionData.phoneId) : undefined,
+          simCardId: attributionData.simCardId ? Number(attributionData.simCardId) : undefined,
+          assignmentDate: attributionData.assignmentDate || "",
+          returnDate: attributionData.returnDate || undefined,
+          status: (attributionData.status || "ACTIVE").toUpperCase(),
+          notes: attributionData.notes || undefined,
+        };
+        console.log("Update payload:", updatePayload);
+        console.log("Selected attribution ID:", selectedAttribution.id);
+        console.log("Selected attribution ID type:", typeof selectedAttribution.id);
+        await attributionApi.updateAttribution(Number(selectedAttribution.id), updatePayload)
+        
+        toast({
+          title: "Attribution modifiée",
+          description: "L'attribution a été mise à jour avec succès.",
+        })
+      } else {
+        // Create new attribution
+        const createPayload = {
+          userId: attributionData.userId ? Number(attributionData.userId) : undefined,
+          phoneId: attributionData.phoneId ? Number(attributionData.phoneId) : undefined,
+          simCardId: attributionData.simCardId ? Number(attributionData.simCardId) : undefined,
+          assignmentDate: attributionData.assignmentDate || "",
+          returnDate: attributionData.returnDate || undefined,
+          status: (attributionData.status || "ACTIVE").toUpperCase(),
+          notes: attributionData.notes || undefined,
+        };
+        console.log("Create payload:", createPayload);
+        await attributionApi.createAttribution(createPayload)
+        
+        toast({
+          title: "Attribution créée",
+          description: "La nouvelle attribution a été créée avec succès.",
+        })
+      }
+      
+      // Refresh the attributions list from the backend
+      await fetchAttributions()
+      setIsModalOpen(false)
+      
+    } catch (err: any) {
+      console.error("Error saving attribution:", err)
+      console.error("Error response:", err.response)
+      console.error("Error status:", err.response?.status)
+      console.error("Error data:", err.response?.data)
+      
+      // Handle specific error cases
+      let errorMessage = "Erreur lors de la sauvegarde de l'attribution"
+      
+      if (err.response?.status === 400) {
+        const errorData = err.response?.data
+        if (errorData?.error?.message) {
+          errorMessage = errorData.error.message
+        } else if (errorData?.message) {
+          errorMessage = errorData.message
+        }
+      } else if (err.response?.status === 409) {
+        errorMessage = "Une attribution similaire existe déjà"
+      } else if (err.response?.status === 403) {
+        errorMessage = "Vous n'avez pas les permissions pour effectuer cette action"
+      } else if (err.response?.status === 404) {
+        errorMessage = "Attribution non trouvée"
+      } else if (err.message?.includes("already exists")) {
+        errorMessage = "Une attribution similaire existe déjà"
+      }
+      
+      toast({
+        title: "Erreur",
+        description: errorMessage,
+        variant: "destructive",
       })
     }
-    setIsModalOpen(false)
   }
 
   const handleExport = () => {
@@ -239,9 +423,9 @@ export default function AttributionsPage() {
 
   const getStatusColor = (status: string) => {
     const colors = {
-      active: "bg-green-100 text-green-800",
-      returned: "bg-gray-100 text-gray-800",
-      pending: "bg-yellow-100 text-yellow-800",
+      ACTIVE: "bg-green-100 text-green-800",
+      RETURNED: "bg-gray-100 text-gray-800",
+      PENDING: "bg-yellow-100 text-yellow-800",
     }
     return colors[status as keyof typeof colors] || "bg-gray-100 text-gray-800"
   }
@@ -313,9 +497,9 @@ export default function AttributionsPage() {
                       onChange={(e) => setStatusFilter(e.target.value)}
                     >
                       <option value="all">Tous les statuts</option>
-                      <option value="active">Actif</option>
-                      <option value="returned">Retourné</option>
-                      <option value="pending">En attente</option>
+                      <option value="ACTIVE">Actif</option>
+                      <option value="RETURNED">Retourné</option>
+                      <option value="PENDING">En attente</option>
                     </select>
                     <Button variant="outline" onClick={handleExport}>
                       <Download className="h-4 w-4 mr-2" />
@@ -340,8 +524,7 @@ export default function AttributionsPage() {
                 <DataTable
                   data={filteredAttributions}
                   columns={attributionColumns}
-                    onRowClick={(attr) => handleEditAttribution(attr)}
-                    renderCell={(attr, key) => {
+                  renderCell={(attr, key) => {
                     if (key === "status") {
                         return <Badge className={getStatusColor(attr.status)}>{attr.status}</Badge>
                     }
@@ -354,15 +537,18 @@ export default function AttributionsPage() {
                           <Button
                             size="sm"
                             variant="outline"
-                              onClick={() => handleEditAttribution(attr)}
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              handleEditAttribution(attr)
+                            }}
                           >
                             <Edit className="h-4 w-4" />
                           </Button>
                           <Button
                             size="sm"
                             variant="outline"
-                              onClick={() => handleDeleteAttribution(attr.id)}
-                            className="text-red-600 hover:text-red-700"
+                            onClick={(e) => handleDeleteAttribution(attr.id, e)}
+                            className="text-red-600 hover:text-red-700 hover:bg-red-50"
                           >
                             <Trash2 className="h-4 w-4" />
                           </Button>
@@ -385,6 +571,56 @@ export default function AttributionsPage() {
         onSave={handleSaveAttribution}
         attribution={selectedAttribution}
       />
+
+      {/* Delete Confirmation Modal */}
+      {isDeleteModalOpen && attributionToDelete && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full mx-4 p-6">
+            <div className="flex items-center space-x-3 mb-4">
+              <div className="bg-red-100 p-3 rounded-xl">
+                <Trash2 className="h-6 w-6 text-red-600" />
+              </div>
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900">Confirmer la suppression</h3>
+                <p className="text-sm text-gray-600">Cette action est irréversible</p>
+              </div>
+            </div>
+            
+            <div className="mb-6">
+              <p className="text-gray-700 mb-2">
+                Êtes-vous sûr de vouloir supprimer l'attribution :
+              </p>
+              <div className="bg-gray-50 rounded-lg p-3">
+                <p className="font-medium text-gray-900">{attributionToDelete.userName}</p>
+                <p className="text-sm text-gray-600">{attributionToDelete.userEmail}</p>
+                <p className="text-sm text-gray-600">
+                  {attributionToDelete.phoneModel && `Téléphone: ${attributionToDelete.phoneModel}`}
+                  {attributionToDelete.simCardNumber && ` • SIM: ${attributionToDelete.simCardNumber}`}
+                </p>
+              </div>
+            </div>
+            
+            <div className="flex space-x-3">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setIsDeleteModalOpen(false)
+                  setAttributionToDelete(null)
+                }}
+                className="flex-1"
+              >
+                Annuler
+              </Button>
+              <Button
+                onClick={confirmDelete}
+                className="flex-1 bg-red-600 hover:bg-red-700 text-white"
+              >
+                Supprimer
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

@@ -245,7 +245,7 @@ export default function AdminDashboard() {
                       <MoreHorizontal className="h-5 w-5" />
                     </div>
                     <div className="space-y-2">
-                      <p className="text-3xl font-bold">€125,450.00</p>
+                      <p className="text-3xl font-bold">1,254,500.00 MAD</p>
                       <div className="flex items-center space-x-2">
                         <TrendingUp className="h-4 w-4" />
                         <span className="text-sm">+8.2% depuis la semaine dernière</span>

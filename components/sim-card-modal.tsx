@@ -17,7 +17,7 @@ interface SimCard {
   number: string
   carrier: string
   plan: string
-  status: "available" | "assigned" | "suspended" | "expired"
+  status: "AVAILABLE" | "ASSIGNED" | "LOST" | "BLOCKED"
   assignedTo?: string
   assignedPhone?: string
   activationDate: string
@@ -42,12 +42,12 @@ export function SimCardModal({ isOpen, onClose, onSave, simCard }: SimCardModalP
     number: "",
     carrier: "",
     plan: "",
-    status: "available" as const,
+    status: "AVAILABLE" as const,
     assignedTo: "",
     assignedPhone: "",
     activationDate: "",
     expiryDate: "",
-    monthlyFee: 0,
+    monthlyFee: undefined as number | undefined,
     dataLimit: "",
     iccid: "",
     pin: "",
@@ -98,12 +98,12 @@ export function SimCardModal({ isOpen, onClose, onSave, simCard }: SimCardModalP
         number: "",
         carrier: "",
         plan: "",
-        status: "available",
+        status: "AVAILABLE",
         assignedTo: "",
         assignedPhone: "",
         activationDate: new Date().toISOString().split("T")[0],
         expiryDate: "",
-        monthlyFee: 0,
+        monthlyFee: undefined,
         dataLimit: "",
         iccid: "",
         pin: "",
@@ -118,7 +118,7 @@ export function SimCardModal({ isOpen, onClose, onSave, simCard }: SimCardModalP
     onSave(formData)
   }
 
-  const carriers = ["Orange", "SFR", "Bouygues", "Free"]
+  const carriers = ["Orange", "Maroc Telecom"]
   const plans = ["Pro 20GB", "Pro 50GB", "Business 100GB", "Enterprise 200GB", "Unlimited"]
 
   return (
@@ -135,7 +135,7 @@ export function SimCardModal({ isOpen, onClose, onSave, simCard }: SimCardModalP
                 id="number"
                 value={formData.number}
                 onChange={(e) => setFormData({ ...formData, number: e.target.value })}
-                placeholder="+33 6 12 34 56 78"
+                placeholder="+212 6 12 34 56 78"
                 required
               />
             </div>
@@ -186,15 +186,18 @@ export function SimCardModal({ isOpen, onClose, onSave, simCard }: SimCardModalP
 
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label htmlFor="monthlyFee">Coût mensuel (€)</Label>
+              <Label htmlFor="monthlyFee">Coût mensuel (MAD)</Label>
               <Input
                 id="monthlyFee"
-                type="number"
-                step="0.01"
-                value={formData.monthlyFee}
-                onChange={(e) => setFormData({ ...formData, monthlyFee: Number(e.target.value) })}
-                placeholder="ex: 45.99"
-                required
+                type="text"
+                inputMode="decimal"
+                pattern="[0-9]*"
+                value={formData.monthlyFee === 0 ? "" : formData.monthlyFee ?? ""}
+                onChange={e => {
+                  const val = e.target.value.replace(/[^0-9.]/g, "");
+                  setFormData({ ...formData, monthlyFee: val === "" ? undefined : val });
+                }}
+                placeholder="ex: 199.99"
               />
             </div>
             <div className="space-y-2">
@@ -206,12 +209,12 @@ export function SimCardModal({ isOpen, onClose, onSave, simCard }: SimCardModalP
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="available">Disponible</SelectItem>
-                  <SelectItem value="assigned">Assignée</SelectItem>
-                  <SelectItem value="suspended">Suspendue</SelectItem>
-                  <SelectItem value="expired">Expirée</SelectItem>
-                </SelectContent>
+                                 <SelectContent>
+                   <SelectItem value="AVAILABLE">Disponible</SelectItem>
+                   <SelectItem value="ASSIGNED">Assignée</SelectItem>
+                   <SelectItem value="LOST">Perdue</SelectItem>
+                   <SelectItem value="BLOCKED">Bloquée</SelectItem>
+                 </SelectContent>
               </Select>
             </div>
           </div>
@@ -239,7 +242,7 @@ export function SimCardModal({ isOpen, onClose, onSave, simCard }: SimCardModalP
             </div>
           </div>
 
-          {formData.status === "assigned" && (
+                     {formData.status === "ASSIGNED" && (
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="assignedTo">Assigné à</Label>

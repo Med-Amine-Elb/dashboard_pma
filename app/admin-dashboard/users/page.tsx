@@ -25,6 +25,7 @@ interface User {
   phone: string
   address: string
   manager: string
+  position: string
 }
 
 export default function UsersPage() {
@@ -35,6 +36,8 @@ export default function UsersPage() {
   const [departmentFilter, setDepartmentFilter] = useState("all")
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [selectedUser, setSelectedUser] = useState<User | null>(null)
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false)
+  const [userToDelete, setUserToDelete] = useState<User | null>(null)
   const { toast } = useToast()
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -115,11 +118,12 @@ export default function UsersPage() {
         email: u.email || "",
         department: u.department || "",
         role: u.role || "",
-        status: u.status === "ACTIVE" ? "active" : "inactive",
+        status: (u.status === "ACTIVE" || u.status === "active") ? "active" : "inactive",
         joinDate: u.joinDate || u.createdAt || "",
         phone: u.phone || "",
         address: u.address || "",
         manager: u.manager || "",
+        position: u.position || "",
       }))
       
       console.log("Mapped users:", mappedUsers)
@@ -167,50 +171,217 @@ export default function UsersPage() {
   }
 
   const handleEditUser = (user: User) => {
-    setSelectedUser(user)
+    // Transform the user data to match UserModal's expected format
+    const transformedUser = {
+      ...user,
+      status: user.status === "active" ? "ACTIVE" : "INACTIVE",
+      role: user.role?.toUpperCase() || "USER",
+    }
+    setSelectedUser(transformedUser)
     setIsModalOpen(true)
   }
 
-  const handleDeleteUser = (userId: string) => {
-    setUsers(users.filter((user) => user.id !== userId))
-    toast({
-      title: "Utilisateur supprimé",
-      description: "L'utilisateur a été supprimé avec succès.",
-    })
+  const handleDeleteUser = async (userId: string, event?: React.MouseEvent) => {
+    // Prevent the row click event from triggering
+    if (event) {
+      event.stopPropagation()
+    }
+    
+    // Find the user to delete
+    const user = users.find(u => u.id === userId)
+    if (!user) {
+      toast({
+        title: "Erreur",
+        description: "Utilisateur non trouvé",
+        variant: "destructive",
+      })
+      return
+    }
+    
+    // Show delete confirmation modal
+    setUserToDelete(user)
+    setIsDeleteModalOpen(true)
   }
 
-  const handleSaveUser = (userData: Partial<User>) => {
-    if (selectedUser) {
-      setUsers(users.map((user) => (user.id === selectedUser.id ? { ...user, ...userData } : user)))
-      toast({
-        title: "Utilisateur modifié",
-        description: "Les informations de l'utilisateur ont été mises à jour.",
-      })
-    } else {
-      const newUser: User = {
-        id: Date.now().toString(),
-        name: userData.name || "",
-        email: userData.email || "",
-        department: userData.department || "",
-        role: userData.role || "",
-        status: userData.status || "active",
-        joinDate: userData.joinDate || new Date().toISOString().split("T")[0],
-        phone: userData.phone || "",
-        address: userData.address || "",
-        manager: userData.manager || "",
+  const confirmDelete = async () => {
+    if (!userToDelete) return
+    
+    try {
+      const token = localStorage.getItem("jwt_token")
+      if (!token) {
+        toast({
+          title: "Erreur",
+          description: "Token d'authentification manquant",
+          variant: "destructive",
+        })
+        return
       }
-      setUsers([...users, newUser])
+
+      const userApi = new UserManagementApi(getApiConfig(token))
+      await userApi.deleteUser(userToDelete.id)
+      
       toast({
-        title: "Utilisateur ajouté",
-        description: "Le nouvel utilisateur a été ajouté avec succès.",
+        title: "Utilisateur supprimé",
+        description: "L'utilisateur a été supprimé avec succès.",
+      })
+      
+      // Refresh the users list from the backend
+      await fetchUsers()
+      
+    } catch (err: any) {
+      console.error("Error deleting user:", err)
+      
+      // Handle specific error cases
+      let errorMessage = "Erreur lors de la suppression de l'utilisateur"
+      
+      if (err.response?.status === 404) {
+        errorMessage = "Utilisateur non trouvé"
+      } else if (err.response?.status === 403) {
+        errorMessage = "Vous n'avez pas les permissions pour supprimer cet utilisateur"
+      } else if (err.response?.status === 409) {
+        errorMessage = "Impossible de supprimer cet utilisateur car il est associé à d'autres données"
+      } else if (err.response?.data?.message) {
+        errorMessage = err.response.data.message
+      }
+      
+      toast({
+        title: "Erreur",
+        description: errorMessage,
+        variant: "destructive",
+      })
+    } finally {
+      setIsDeleteModalOpen(false)
+      setUserToDelete(null)
+    }
+  }
+
+  const handleSaveUser = async (userData: Partial<User>) => {
+    try {
+      // Validation
+      const errors: string[] = []
+      
+      if (!userData.name || userData.name.trim() === "") {
+        errors.push("Le nom est obligatoire")
+      }
+      
+      if (!userData.email || userData.email.trim() === "") {
+        errors.push("L'email est obligatoire")
+      } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(userData.email)) {
+        errors.push("L'email n'est pas valide")
+      }
+      
+      if (!userData.department || userData.department.trim() === "") {
+        errors.push("Le département est obligatoire")
+      }
+      
+      if (!userData.role || userData.role.trim() === "") {
+        errors.push("Le rôle est obligatoire")
+      }
+      
+      if (!selectedUser && (!userData.password || userData.password.trim() === "")) {
+        errors.push("Le mot de passe est obligatoire pour un nouvel utilisateur")
+      }
+      
+      if (errors.length > 0) {
+        toast({
+          title: "Erreur de validation",
+          description: errors.join(", "),
+          variant: "destructive",
+        })
+        return
+      }
+
+      const token = localStorage.getItem("jwt_token")
+      if (!token) {
+        toast({
+          title: "Erreur",
+          description: "Token d'authentification manquant",
+          variant: "destructive",
+        })
+        return
+      }
+
+      const userApi = new UserManagementApi(getApiConfig(token))
+      
+      if (selectedUser) {
+        // Update existing user
+        await userApi.updateUser(selectedUser.id, {
+          name: userData.name || "",
+          email: userData.email || "",
+          department: userData.department || "",
+          role: userData.role?.toUpperCase() || "USER",
+          status: userData.status === "ACTIVE" ? "ACTIVE" : "INACTIVE",
+          phone: userData.phone || "",
+          address: userData.address || "",
+          manager: userData.manager || "",
+          position: userData.position || "",
+        })
+        
+        toast({
+          title: "Utilisateur modifié",
+          description: "Les informations de l'utilisateur ont été mises à jour.",
+        })
+      } else {
+        // Create new user
+        await userApi.createUser({
+          name: userData.name || "",
+          email: userData.email || "",
+          password: userData.password || "defaultPassword123",
+          department: userData.department || "",
+          role: userData.role?.toUpperCase() || "USER",
+          status: userData.status === "ACTIVE" ? "ACTIVE" : "INACTIVE",
+          phone: userData.phone || "",
+          address: userData.address || "",
+          manager: userData.manager || "",
+          position: userData.position || "",
+        })
+        
+        toast({
+          title: "Utilisateur ajouté",
+          description: "Le nouvel utilisateur a été ajouté avec succès.",
+        })
+      }
+      
+      // Refresh the users list from the backend
+      await fetchUsers()
+      setIsModalOpen(false)
+      
+    } catch (err: any) {
+      console.error("Error saving user:", err)
+      
+      // Handle specific error cases
+      let errorMessage = "Erreur lors de la sauvegarde de l'utilisateur"
+      
+      if (err.response?.status === 400) {
+        const errorData = err.response?.data
+        if (errorData?.error?.message) {
+          errorMessage = errorData.error.message
+        } else if (errorData?.message) {
+          errorMessage = errorData.message
+        }
+      } else if (err.response?.status === 409) {
+        errorMessage = "Un utilisateur avec cet email existe déjà"
+      } else if (err.response?.status === 403) {
+        errorMessage = "Vous n'avez pas les permissions pour effectuer cette action"
+      } else if (err.response?.status === 404) {
+        errorMessage = "Utilisateur non trouvé"
+      } else if (err.message?.includes("Email already exists")) {
+        errorMessage = "Un utilisateur avec cet email existe déjà"
+      } else if (err.message?.includes("User not found")) {
+        errorMessage = "Utilisateur non trouvé"
+      }
+      
+      toast({
+        title: "Erreur",
+        description: errorMessage,
+        variant: "destructive",
       })
     }
-    setIsModalOpen(false)
   }
 
   const handleExport = () => {
     const csvContent = [
-      ["Nom", "Email", "Département", "Rôle", "Statut", "Date d'arrivée", "Téléphone", "Adresse", "Manager"],
+      ["Nom", "Email", "Département", "Rôle", "Statut", "Date d'arrivée", "Téléphone", "Adresse", "Manager", "Poste"],
       ...filteredUsers.map((user) => [
         user.name,
         user.email,
@@ -221,6 +392,7 @@ export default function UsersPage() {
         user.phone,
         user.address,
         user.manager,
+        user.position,
       ]),
     ]
       .map((row) => row.join(","))
@@ -248,6 +420,7 @@ export default function UsersPage() {
     { key: "status", label: "Statut" },
     { key: "phone", label: "Téléphone" },
     { key: "manager", label: "Manager" },
+    { key: "position", label: "Poste" },
     { key: "joinDate", label: "Date d'arrivée" },
     { key: "actions", label: "Actions" },
   ]
@@ -371,7 +544,6 @@ export default function UsersPage() {
                 <DataTable
                   data={filteredUsers}
                   columns={userColumns}
-                  onRowClick={(user) => handleEditUser(user)}
                   renderCell={(user, key) => {
                     if (key === "status") {
                       return <Badge className={getStatusColor(user.status)}>{user.status}</Badge>
@@ -379,14 +551,21 @@ export default function UsersPage() {
                     if (key === "actions") {
                       return (
                         <div className="flex items-center space-x-2">
-                          <Button size="sm" variant="outline" onClick={() => handleEditUser(user)}>
+                          <Button 
+                            size="sm" 
+                            variant="outline" 
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              handleEditUser(user)
+                            }}
+                          >
                             <Edit className="h-4 w-4" />
                           </Button>
                           <Button
                             size="sm"
                             variant="outline"
-                            onClick={() => handleDeleteUser(user.id)}
-                            className="text-red-600 hover:text-red-700"
+                            onClick={(e) => handleDeleteUser(user.id, e)}
+                            className="text-red-600 hover:text-red-700 hover:bg-red-50"
                           >
                             <Trash2 className="h-4 w-4" />
                           </Button>
@@ -410,6 +589,53 @@ export default function UsersPage() {
         onSave={handleSaveUser}
         user={selectedUser}
       />
+
+      {/* Delete Confirmation Modal */}
+      {isDeleteModalOpen && userToDelete && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full mx-4 p-6">
+            <div className="flex items-center space-x-3 mb-4">
+              <div className="bg-red-100 p-3 rounded-xl">
+                <Trash2 className="h-6 w-6 text-red-600" />
+              </div>
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900">Confirmer la suppression</h3>
+                <p className="text-sm text-gray-600">Cette action est irréversible</p>
+              </div>
+            </div>
+            
+            <div className="mb-6">
+              <p className="text-gray-700 mb-2">
+                Êtes-vous sûr de vouloir supprimer l'utilisateur :
+              </p>
+              <div className="bg-gray-50 rounded-lg p-3">
+                <p className="font-medium text-gray-900">{userToDelete.name}</p>
+                <p className="text-sm text-gray-600">{userToDelete.email}</p>
+                <p className="text-sm text-gray-600">{userToDelete.department} • {userToDelete.role}</p>
+              </div>
+            </div>
+            
+            <div className="flex space-x-3">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setIsDeleteModalOpen(false)
+                  setUserToDelete(null)
+                }}
+                className="flex-1"
+              >
+                Annuler
+              </Button>
+              <Button
+                onClick={confirmDelete}
+                className="flex-1 bg-red-600 hover:bg-red-700 text-white"
+              >
+                Supprimer
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

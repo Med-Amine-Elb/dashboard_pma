@@ -18,14 +18,32 @@ interface PhoneData {
   id: string
   model: string
   brand: string
-  status: "available" | "assigned" | "maintenance" | "retired"
+  status: "AVAILABLE" | "ASSIGNED" | "LOST" | "DAMAGED"
   purchaseDate: string
-  condition: "excellent" | "good" | "fair" | "poor"
+  condition: "EXCELLENT" | "GOOD" | "FAIR" | "POOR"
   serialNumber: string
   price: number
   imei: string
   storage: string
   color: string
+  notes?: string
+  assignedTo?: string
+  assignedToName?: string
+  assignedToDepartment?: string
+  assignedDate?: string
+}
+
+interface PhoneDtoCustom {
+  brand: string;
+  model: string;
+  imei: string;
+  serialNumber: string;
+  status: "AVAILABLE" | "ASSIGNED" | "LOST" | "DAMAGED";
+  condition: "EXCELLENT" | "GOOD" | "FAIR" | "POOR";
+  storage: string;
+  color: string;
+  price: number;
+  notes?: string;
 }
 
 export default function PhonesPage() {
@@ -36,6 +54,8 @@ export default function PhonesPage() {
   const [statusFilter, setStatusFilter] = useState("all")
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [selectedPhone, setSelectedPhone] = useState<PhoneData | null>(null)
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false)
+  const [phoneToDelete, setPhoneToDelete] = useState<PhoneData | null>(null)
   const { toast } = useToast()
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -62,8 +82,32 @@ export default function PhonesPage() {
     setError(null)
     try {
       const token = localStorage.getItem("jwt_token")
+      console.log("Stored JWT token:", token ? token.substring(0, 50) + "..." : "No token found")
+      
+      if (!token) {
+        setError("Token d'authentification manquant")
+        return
+      }
+
+      // Decode JWT token to check its content
+      try {
+        const payload = JSON.parse(atob(token.split('.')[1]))
+        console.log("JWT Token payload:", payload)
+        console.log("Token expiration:", new Date(payload.exp * 1000))
+        console.log("Token is expired:", Date.now() > payload.exp * 1000)
+      } catch (e) {
+        console.error("Error decoding JWT token:", e)
+      }
+
       const api = new PhoneManagementApi(getApiConfig(token))
+      console.log("API config:", getApiConfig(token))
+      console.log("Fetching phones...")
+      
       const res = await api.getPhones()
+      console.log("API Response:", res)
+      console.log("Response data:", res.data)
+      console.log("Response status:", res.status)
+      
       // Correctly extract phones from backend response
       let apiPhones: any[] = [];
       if (Array.isArray(res.data)) {
@@ -83,23 +127,37 @@ export default function PhonesPage() {
       ) {
         apiPhones = (res.data as any).phones;
       }
-      setPhones(
-        (apiPhones || []).map((p: any) => ({
-          id: String(p.id),
-          model: p.model,
-          brand: p.brand,
-          status: (p.status || "available").toLowerCase(),
-          purchaseDate: p.purchaseDate || "",
-          condition: p.condition || "good",
-          serialNumber: p.serialNumber || "",
-          price: p.price || 0,
-          imei: p.imei || "",
-          storage: p.storage || "",
-          color: p.color || "",
-        }))
-      )
+      
+      console.log("Processed phones:", apiPhones)
+      
+      const mappedPhones = (apiPhones || []).map((p: any) => ({
+        id: String(p.id),
+        model: p.model || "",
+        brand: p.brand || "",
+        status: (p.status || "AVAILABLE").toUpperCase(),
+        purchaseDate: p.purchaseDate || "",
+        condition: (p.condition || "GOOD").toUpperCase(),
+        serialNumber: p.serialNumber || "",
+        price: p.price || 0,
+        imei: p.imei || "",
+        storage: p.storage || "",
+        color: p.color || "",
+        notes: p.notes || "",
+        assignedTo: p.assignedTo || "",
+        assignedToName: p.assignedToName || "",
+        assignedToDepartment: p.assignedToDepartment || "",
+        assignedDate: p.assignedDate || "",
+      }))
+      
+      console.log("Mapped phones:", mappedPhones)
+      setPhones(mappedPhones)
+      
     } catch (err: any) {
-      setError("Erreur lors du chargement des téléphones.")
+      console.error("Error fetching phones:", err)
+      console.error("Error response:", err.response)
+      console.error("Error status:", err.response?.status)
+      console.error("Error data:", err.response?.data)
+      setError(err.response?.data?.message || "Erreur lors du chargement des téléphones.")
     } finally {
       setLoading(false)
     }
@@ -140,44 +198,212 @@ export default function PhonesPage() {
     setIsModalOpen(true)
   }
 
-  const handleDeletePhone = (phoneId: string) => {
-    setPhones(phones.filter((phone) => phone.id !== phoneId))
-    toast({
-      title: "Téléphone supprimé",
-      description: "Le téléphone a été supprimé avec succès.",
-    })
+  const handleDeletePhone = async (phoneId: string, event?: React.MouseEvent) => {
+    
+    if (event) {
+      event.stopPropagation()
+    }
+    
+    // Find the phone to delete
+    const phone = phones.find(p => p.id === phoneId)
+    if (!phone) {
+      toast({
+        title: "Erreur",
+        description: "Téléphone non trouvé",
+        variant: "destructive",
+      })
+      return
+    }
+    
+    // Show delete confirmation modal
+    setPhoneToDelete(phone)
+    setIsDeleteModalOpen(true)
   }
 
-  const handleSavePhone = (phoneData: Partial<PhoneData>) => {
-    if (selectedPhone) {
-      // Edit existing phone
-      setPhones(phones.map((phone) => (phone.id === selectedPhone.id ? { ...phone, ...phoneData } : phone)))
-      toast({
-        title: "Téléphone modifié",
-        description: "Les informations du téléphone ont été mises à jour.",
-      })
-    } else {
-      // Add new phone
-      const newPhone: PhoneData = {
-        id: Date.now().toString(),
-        model: phoneData.model || "",
-        brand: phoneData.brand || "",
-        status: phoneData.status || "available",
-        purchaseDate: phoneData.purchaseDate || new Date().toISOString().split("T")[0],
-        condition: phoneData.condition || "excellent",
-        serialNumber: phoneData.serialNumber || "",
-        price: phoneData.price || 0,
-        imei: phoneData.imei || "",
-        storage: phoneData.storage || "",
-        color: phoneData.color || "",
+  const confirmDelete = async () => {
+    if (!phoneToDelete) return
+    
+    try {
+      const token = localStorage.getItem("jwt_token")
+      if (!token) {
+        toast({
+          title: "Erreur",
+          description: "Token d'authentification manquant",
+          variant: "destructive",
+        })
+        return
       }
-      setPhones([...phones, newPhone])
+
+      const phoneApi = new PhoneManagementApi(getApiConfig(token))
+      await phoneApi.deletePhone(Number(phoneToDelete.id))
+      
       toast({
-        title: "Téléphone ajouté",
-        description: "Le nouveau téléphone a été ajouté avec succès.",
+        title: "Téléphone supprimé",
+        description: "Le téléphone a été supprimé avec succès.",
+      })
+      
+      // Refresh the phones list from the backend
+      await fetchPhones()
+      
+    } catch (err: any) {
+      console.error("Error deleting phone:", err)
+      
+      // Handle specific error cases
+      let errorMessage = "Erreur lors de la suppression du téléphone"
+      
+      if (err.response?.status === 404) {
+        errorMessage = "Téléphone non trouvé"
+      } else if (err.response?.status === 403) {
+        errorMessage = "Vous n'avez pas les permissions pour supprimer ce téléphone"
+      } else if (err.response?.status === 409) {
+        errorMessage = "Impossible de supprimer ce téléphone car il est associé à d'autres données"
+      } else if (err.response?.data?.message) {
+        errorMessage = err.response.data.message
+      }
+      
+      toast({
+        title: "Erreur",
+        description: errorMessage,
+        variant: "destructive",
+      })
+    } finally {
+      setIsDeleteModalOpen(false)
+      setPhoneToDelete(null)
+    }
+  }
+
+  const handleSavePhone = async (phoneData: Partial<PhoneData>) => {
+    try {
+      // Comprehensive validation
+      const errors: string[] = []
+      
+      if (!phoneData.model || phoneData.model.trim() === "") {
+        errors.push("Le modèle est obligatoire")
+      }
+      
+      if (!phoneData.brand || phoneData.brand.trim() === "") {
+        errors.push("La marque est obligatoire")
+      }
+      
+      if (!phoneData.imei || phoneData.imei.trim() === "") {
+        errors.push("L'IMEI est obligatoire")
+      } else if (phoneData.imei.length < 10) {
+        errors.push("L'IMEI doit contenir au moins 10 caractères")
+      }
+      
+      if (!phoneData.serialNumber || phoneData.serialNumber.trim() === "") {
+        errors.push("Le numéro de série est obligatoire")
+      }
+      
+      if (!phoneData.purchaseDate || phoneData.purchaseDate.trim() === "") {
+        errors.push("La date d'achat est obligatoire")
+      }
+      
+      if (phoneData.price !== undefined && phoneData.price < 0) {
+        errors.push("Le prix ne peut pas être négatif")
+      }
+      
+      if (phoneData.storage && !phoneData.storage.match(/^(64GB|128GB|256GB|512GB|1TB)$/)) {
+        errors.push("Le stockage doit être une des valeurs suivantes: 64GB, 128GB, 256GB, 512GB, 1TB")
+      }
+      
+      if (errors.length > 0) {
+        toast({
+          title: "Erreur de validation",
+          description: errors.join(", "),
+          variant: "destructive",
+        })
+        return
+      }
+
+      const token = localStorage.getItem("jwt_token")
+      if (!token) {
+        toast({
+          title: "Erreur",
+          description: "Token d'authentification manquant",
+          variant: "destructive",
+        })
+        return
+      }
+
+      const phoneApi = new PhoneManagementApi(getApiConfig(token))
+      
+      if (selectedPhone) {
+        // Update existing phone
+        await phoneApi.updatePhone(Number(selectedPhone.id), {
+          brand: phoneData.brand || "",
+          model: phoneData.model || "",
+          imei: phoneData.imei || "",
+          serialNumber: phoneData.serialNumber || "",
+          status: phoneData.status || "AVAILABLE",
+          condition: phoneData.condition || "EXCELLENT",
+          storage: phoneData.storage || "",
+          color: phoneData.color || "",
+          price: phoneData.price ? Number(phoneData.price) : 0,
+          notes: phoneData.notes || "",
+        } as PhoneDtoCustom);
+        
+        toast({
+          title: "Téléphone modifié",
+          description: "Les informations du téléphone ont été mises à jour.",
+        })
+      } else {
+        // Create new phone
+        await phoneApi.createPhone({
+          brand: phoneData.brand || "",
+          model: phoneData.model || "",
+          imei: phoneData.imei || "",
+          serialNumber: phoneData.serialNumber || "",
+          status: phoneData.status || "AVAILABLE",
+          condition: phoneData.condition || "EXCELLENT",
+          storage: phoneData.storage || "",
+          color: phoneData.color || "",
+          price: phoneData.price ? Number(phoneData.price) : 0,
+          notes: phoneData.notes || "",
+        } as PhoneDtoCustom);
+        
+        toast({
+          title: "Téléphone ajouté",
+          description: "Le nouveau téléphone a été ajouté avec succès.",
+        })
+      }
+      
+      // Refresh the phones list from the backend
+      await fetchPhones()
+      setIsModalOpen(false)
+      
+    } catch (err: any) {
+      console.error("Error saving phone:", err)
+      console.error("Error response:", err.response)
+      console.error("Error status:", err.response?.status)
+      console.error("Error data:", err.response?.data)
+      
+      // Handle specific error cases
+      let errorMessage = "Erreur lors de la sauvegarde du téléphone"
+      
+      if (err.response?.status === 400) {
+        const errorData = err.response?.data
+        if (errorData?.error?.message) {
+          errorMessage = errorData.error.message
+        } else if (errorData?.message) {
+          errorMessage = errorData.message
+        }
+      } else if (err.response?.status === 409) {
+        errorMessage = "Un téléphone avec ce numéro de série existe déjà"
+      } else if (err.response?.status === 403) {
+        errorMessage = "Vous n'avez pas les permissions pour effectuer cette action"
+      } else if (err.response?.status === 404) {
+        errorMessage = "Téléphone non trouvé"
+      } else if (err.message?.includes("already exists")) {
+        errorMessage = "Un téléphone avec ce numéro de série existe déjà"
+      }
+      
+      toast({
+        title: "Erreur",
+        description: errorMessage,
+        variant: "destructive",
       })
     }
-    setIsModalOpen(false)
   }
 
   const handleExport = () => {
@@ -341,7 +567,6 @@ export default function PhonesPage() {
                 <DataTable
                   data={filteredPhones}
                   columns={phoneColumns}
-                  onRowClick={(phone) => handleEditPhone(phone)}
                   renderCell={(phone, key) => {
                     if (key === "status") {
                       return <Badge className={getStatusColor(phone.status)}>{phone.status}</Badge>
@@ -350,19 +575,26 @@ export default function PhonesPage() {
                       return <Badge className={getConditionColor(phone.condition)}>{phone.condition}</Badge>
                     }
                     if (key === "price") {
-                      return <span>€{phone.price}</span>
+                      return <span>{phone.price} MAD</span>
                     }
                     if (key === "actions") {
                       return (
                         <div className="flex items-center space-x-2">
-                          <Button size="sm" variant="outline" onClick={() => handleEditPhone(phone)}>
+                          <Button 
+                            size="sm" 
+                            variant="outline" 
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              handleEditPhone(phone)
+                            }}
+                          >
                             <Edit className="h-4 w-4" />
                           </Button>
                           <Button
                             size="sm"
                             variant="outline"
-                            onClick={() => handleDeletePhone(phone.id)}
-                            className="text-red-600 hover:text-red-700"
+                            onClick={(e) => handleDeletePhone(phone.id, e)}
+                            className="text-red-600 hover:text-red-700 hover:bg-red-50"
                           >
                             <Trash2 className="h-4 w-4" />
                           </Button>
@@ -385,6 +617,53 @@ export default function PhonesPage() {
         onSave={handleSavePhone}
         phone={selectedPhone}
       />
+
+      {/* Delete Confirmation Modal */}
+      {isDeleteModalOpen && phoneToDelete && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full mx-4 p-6">
+            <div className="flex items-center space-x-3 mb-4">
+              <div className="bg-red-100 p-3 rounded-xl">
+                <Trash2 className="h-6 w-6 text-red-600" />
+              </div>
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900">Confirmer la suppression</h3>
+                <p className="text-sm text-gray-600">Cette action est irréversible</p>
+              </div>
+            </div>
+            
+            <div className="mb-6">
+              <p className="text-gray-700 mb-2">
+                Êtes-vous sûr de vouloir supprimer le téléphone :
+              </p>
+              <div className="bg-gray-50 rounded-lg p-3">
+                <p className="font-medium text-gray-900">{phoneToDelete.brand} {phoneToDelete.model}</p>
+                <p className="text-sm text-gray-600">N° Série: {phoneToDelete.serialNumber}</p>
+                <p className="text-sm text-gray-600">IMEI: {phoneToDelete.imei}</p>
+              </div>
+            </div>
+            
+            <div className="flex space-x-3">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setIsDeleteModalOpen(false)
+                  setPhoneToDelete(null)
+                }}
+                className="flex-1"
+              >
+                Annuler
+              </Button>
+              <Button
+                onClick={confirmDelete}
+                className="flex-1 bg-red-600 hover:bg-red-700 text-white"
+              >
+                Supprimer
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

@@ -15,13 +15,19 @@ interface Phone {
   id: string
   model: string
   brand: string
-  status: "available" | "assigned" | "maintenance" | "retired"
+  status: "AVAILABLE" | "ASSIGNED" | "LOST" | "DAMAGED"
   assignedTo?: string
+  assignedToName?: string
+  assignedToDepartment?: string
   department?: string
   purchaseDate: string
-  condition: "excellent" | "good" | "fair" | "poor"
+  condition: "EXCELLENT" | "GOOD" | "FAIR" | "POOR"
   serialNumber: string
   price: number
+  imei: string
+  storage: string
+  color: string
+  notes?: string
 }
 
 interface PhoneModalProps {
@@ -37,7 +43,7 @@ export function PhoneModal({ isOpen, onClose, onSave, phone }: PhoneModalProps) 
     brand: "",
     imei: "",
     serialNumber: "",
-    status: "available" as const,
+    status: "AVAILABLE" as const,
     condition: "EXCELLENT" as const,
     storage: "",
     color: "",
@@ -68,6 +74,37 @@ export function PhoneModal({ isOpen, onClose, onSave, phone }: PhoneModalProps) 
       "Galaxy Z Flip7 FE"
     ]
   };
+
+  const storageOptions = [
+    { value: "64GB", label: "64 GB" },
+    { value: "128GB", label: "128 GB" },
+    { value: "256GB", label: "256 GB" },
+    { value: "512GB", label: "512 GB" },
+    { value: "1TB", label: "1 TB" }
+  ];
+
+  const colorOptions = {
+    // Apple iPhone 16 / 16 Plus
+    "iPhone 16": ["Black", "White", "Pink", "Teal", "Ultramarine"],
+    "iPhone 16 Plus": ["Black", "White", "Pink", "Teal", "Ultramarine"],
+    // Apple iPhone 16 Pro / Pro Max
+    "iPhone 16 Pro": ["Black Titanium", "White Titanium", "Natural Titanium", "Desert Titanium"],
+    "iPhone 16 Pro Max": ["Black Titanium", "White Titanium", "Natural Titanium", "Desert Titanium"],
+    // Apple iPhone 16e
+    "iPhone 16e": ["Black", "White"],
+    // Samsung Galaxy S25 / S25+
+    "Galaxy S25": ["Icy Blue", "Mint", "Navy", "Silver Shadow", "Pink Gold", "Coral Red", "Blue Black"],
+    "Galaxy S25+": ["Icy Blue", "Mint", "Navy", "Silver Shadow", "Pink Gold", "Coral Red", "Blue Black"],
+    // Samsung Galaxy S25 Ultra
+    "Galaxy S25 Ultra": ["Titanium Silver Blue", "Titanium Black", "Titanium White Silver", "Titanium Gray", "Titanium Jade Green", "Titanium Jet Black", "Titanium Pink Gold"],
+    // Samsung Z Fold7
+    "Galaxy Z Fold7": ["Blue Shadow", "Silver Shadow", "Jetblack"],
+    // Samsung Z Flip7
+    "Galaxy Z Flip7": ["Blue Shadow", "Jetblack", "Coral Red"],
+    // Samsung Z Flip7 FE
+    "Galaxy Z Flip7 FE": ["Black", "White"]
+  };
+
   const [customBrand, setCustomBrand] = useState("");
   const [customModel, setCustomModel] = useState("");
 
@@ -105,7 +142,7 @@ export function PhoneModal({ isOpen, onClose, onSave, phone }: PhoneModalProps) 
         serialNumber: phone.serialNumber || "",
         status: phone.status,
         condition: phone.condition || "EXCELLENT",
-        storage: phone.storage ? phone.storage.replace('GB', '') : "",
+        storage: phone.storage || "",
         color: phone.color || "",
         price: phone.price ? phone.price.toString() : "",
         assignedTo: phone.assignedTo || "",
@@ -121,7 +158,7 @@ export function PhoneModal({ isOpen, onClose, onSave, phone }: PhoneModalProps) 
         brand: "",
         imei: "",
         serialNumber: "",
-        status: "available",
+        status: "AVAILABLE",
         condition: "EXCELLENT",
         storage: "",
         color: "",
@@ -145,10 +182,6 @@ export function PhoneModal({ isOpen, onClose, onSave, phone }: PhoneModalProps) 
     }
     // Convert price to number if not empty
     dataToSave.price = dataToSave.price === "" ? 0 : Number(dataToSave.price);
-    // Add GB to storage if it's not empty and doesn't already have GB
-    if (dataToSave.storage && !dataToSave.storage.includes('GB')) {
-      dataToSave.storage = dataToSave.storage + 'GB';
-    }
     onSave(dataToSave);
   }
 
@@ -162,11 +195,11 @@ export function PhoneModal({ isOpen, onClose, onSave, phone }: PhoneModalProps) 
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label htmlFor="brand">Marque</Label>
-              <Select value={formData.brand} onValueChange={(value) => {
-                setFormData({ ...formData, brand: value, model: "" });
-                setCustomBrand("");
-                setCustomModel("");
-              }}>
+                             <Select value={formData.brand} onValueChange={(value) => {
+                 setFormData({ ...formData, brand: value, model: "", color: "" });
+                 setCustomBrand("");
+                 setCustomModel("");
+               }}>
                 <SelectTrigger>
                   <SelectValue placeholder="Sélectionner une marque" />
                 </SelectTrigger>
@@ -179,21 +212,24 @@ export function PhoneModal({ isOpen, onClose, onSave, phone }: PhoneModalProps) 
               {formData.brand === "Autre" && (
                 <div className="space-y-2 mt-2">
                   <Label htmlFor="customBrand">Nom de la marque</Label>
-                  <Input
-                    id="customBrand"
-                    type="text"
-                    placeholder="Entrer la marque"
-                    value={customBrand}
-                    onChange={e => setCustomBrand(e.target.value)}
-                    required
-                  />
+                                     <Input
+                     id="customBrand"
+                     type="text"
+                     placeholder="Entrer la marque"
+                     value={customBrand}
+                     onChange={e => {
+                       setCustomBrand(e.target.value);
+                       setFormData({ ...formData, brand: e.target.value, model: "", color: "" });
+                     }}
+                     required
+                   />
                 </div>
               )}
             </div>
             <div className="space-y-2">
               <Label htmlFor="model">Modèle</Label>
               {(formData.brand === "Apple" || formData.brand === "Samsung") ? (
-                <Select value={formData.model} onValueChange={(value) => setFormData({ ...formData, model: value })}>
+                <Select value={formData.model} onValueChange={(value) => setFormData({ ...formData, model: value, color: "" })}>
                   <SelectTrigger>
                     <SelectValue placeholder="Sélectionner un modèle" />
                   </SelectTrigger>
@@ -206,14 +242,17 @@ export function PhoneModal({ isOpen, onClose, onSave, phone }: PhoneModalProps) 
               ) : formData.brand === "Autre" ? (
                 <div className="space-y-2 mt-2">
                   <Label htmlFor="customModel">Nom du modèle</Label>
-                  <Input
-                    id="customModel"
-                    type="text"
-                    placeholder="Entrer le modèle"
-                    value={customModel}
-                    onChange={e => setCustomModel(e.target.value)}
-                    required
-                  />
+                                     <Input
+                     id="customModel"
+                     type="text"
+                     placeholder="Entrer le modèle"
+                     value={customModel}
+                     onChange={e => {
+                       setCustomModel(e.target.value);
+                       setFormData({ ...formData, model: e.target.value, color: "" });
+                     }}
+                     required
+                   />
                 </div>
               ) : (
                 <Input
@@ -248,39 +287,62 @@ export function PhoneModal({ isOpen, onClose, onSave, phone }: PhoneModalProps) 
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="storage">Stockage</Label>
-              <Input
-                id="storage"
-                value={formData.storage}
-                onChange={(e) => setFormData({ ...formData, storage: e.target.value })}
-                placeholder="ex: 128"
-              />
-              <p className="text-xs text-gray-500">Entrez le nombre (ex: 128) - GB sera ajouté automatiquement</p>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="color">Couleur</Label>
-              <Input
-                id="color"
-                value={formData.color}
-                onChange={(e) => setFormData({ ...formData, color: e.target.value })}
-                placeholder="ex: Noir"
-              />
-            </div>
-          </div>
+                     <div className="grid grid-cols-2 gap-4">
+             <div className="space-y-2">
+               <Label htmlFor="storage">Stockage</Label>
+               <Select
+                 value={formData.storage}
+                 onValueChange={(value) => setFormData({ ...formData, storage: value })}
+               >
+                 <SelectTrigger>
+                   <SelectValue placeholder="Sélectionner le stockage" />
+                 </SelectTrigger>
+                 <SelectContent>
+                   {storageOptions.map((option) => (
+                     <SelectItem key={option.value} value={option.value}>
+                       {option.label}
+                     </SelectItem>
+                   ))}
+                 </SelectContent>
+               </Select>
+             </div>
+             <div className="space-y-2">
+               <Label htmlFor="color">Couleur</Label>
+               <Select
+                 value={formData.color}
+                 onValueChange={(value) => setFormData({ ...formData, color: value })}
+                 disabled={!formData.model || !colorOptions[formData.model]}
+               >
+                 <SelectTrigger>
+                   <SelectValue placeholder={formData.model ? "Sélectionner la couleur" : "Sélectionner un modèle d'abord"} />
+                 </SelectTrigger>
+                 <SelectContent>
+                   {formData.model && colorOptions[formData.model] ? (
+                     colorOptions[formData.model].map((color) => (
+                       <SelectItem key={color} value={color}>
+                         {color}
+                       </SelectItem>
+                     ))
+                   ) : null}
+                 </SelectContent>
+               </Select>
+             </div>
+           </div>
 
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label htmlFor="price">Prix (€)</Label>
+              <Label htmlFor="price">Prix (MAD)</Label>
               <Input
                 id="price"
-                type="number"
-                min="0"
-                step="0.01"
-                placeholder="Prix (€)"
-                value={formData.price}
-                onChange={e => setFormData({ ...formData, price: e.target.value })}
+                type="text"
+                inputMode="decimal"
+                pattern="[0-9]*"
+                value={formData.price === 0 ? "" : formData.price ?? ""}
+                onChange={e => {
+                  const val = e.target.value.replace(/[^0-9.]/g, "");
+                  setFormData({ ...formData, price: val === "" ? undefined : val });
+                }}
+                placeholder="Prix (MAD)"
               />
             </div>
             <div className="space-y-2">
@@ -303,7 +365,34 @@ export function PhoneModal({ isOpen, onClose, onSave, phone }: PhoneModalProps) 
             </div>
           </div>
 
-          {formData.status === "assigned" && (
+          {/* Show assigned user and department for existing phones (read-only) */}
+          {phone && (phone.assignedTo || phone.department) && (
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="assignedTo">Assigné à</Label>
+                <Input
+                  id="assignedTo"
+                  value={phone.assignedToName || phone.assignedTo || "Non assigné"}
+                  readOnly
+                  disabled
+                  className="bg-gray-50"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="department">Département</Label>
+                <Input
+                  id="department"
+                  value={phone.assignedToDepartment || phone.department || "Non spécifié"}
+                  readOnly
+                  disabled
+                  className="bg-gray-50"
+                />
+              </div>
+            </div>
+          )}
+
+          {/* Show assignment fields only for new phones or when status is ASSIGNED */}
+          {!phone && formData.status === "ASSIGNED" && (
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="assignedTo">Assigné à</Label>
@@ -344,16 +433,26 @@ export function PhoneModal({ isOpen, onClose, onSave, phone }: PhoneModalProps) 
             </div>
           )}
 
-          <div className="space-y-2">
-            <Label htmlFor="purchaseDate">Date d'achat</Label>
-            <Input
-              id="purchaseDate"
-              type="date"
-              value={formData.purchaseDate}
-              onChange={(e) => setFormData({ ...formData, purchaseDate: e.target.value })}
-              required
-            />
-          </div>
+                     <div className="space-y-2">
+             <Label htmlFor="purchaseDate">Date d'achat</Label>
+             <Input
+               id="purchaseDate"
+               type="date"
+               value={formData.purchaseDate}
+               onChange={(e) => setFormData({ ...formData, purchaseDate: e.target.value })}
+               required
+             />
+           </div>
+
+           <div className="space-y-2">
+             <Label htmlFor="notes">Notes</Label>
+             <Input
+               id="notes"
+               value={formData.notes}
+               onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+               placeholder="Notes additionnelles..."
+             />
+           </div>
 
           <div className="flex justify-end space-x-2 pt-4">
             <Button type="button" variant="outline" onClick={onClose}>

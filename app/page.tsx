@@ -73,11 +73,27 @@ export default function LoginPage() {
       }
     } catch (err: any) {
       console.error("Login error:", err)
-      setError(
-        err.response?.data?.message || 
-        err.response?.data?.error || 
-        "Email ou mot de passe incorrect"
-      )
+      
+      // Handle specific error cases
+      let errorMessage = "Email ou mot de passe incorrect"
+      
+      if (err.response?.data?.message) {
+        errorMessage = err.response.data.message
+      } else if (err.response?.data?.error) {
+        errorMessage = err.response.data.error
+      } else if (err.message?.includes("Account is inactive") || err.message?.includes("désactivé")) {
+        errorMessage = "Votre compte a été désactivé. Veuillez contacter l'administrateur."
+      } else if (err.message?.includes("Invalid email or password")) {
+        errorMessage = "Email ou mot de passe incorrect"
+      } else if (err.response?.status === 400) {
+        errorMessage = "Données de connexion invalides"
+      } else if (err.response?.status === 401) {
+        errorMessage = "Email ou mot de passe incorrect"
+      } else if (err.response?.status === 403) {
+        errorMessage = "Accès refusé. Votre compte pourrait être désactivé."
+      }
+      
+      setError(errorMessage)
     } finally {
     setIsLoading(false)
     }
@@ -128,11 +144,27 @@ export default function LoginPage() {
       }
     } catch (err: any) {
       console.error("Demo login error:", err)
-      setError(
-        err.response?.data?.message || 
-        err.response?.data?.error || 
-        "Échec de la connexion avec le compte de démonstration"
-      )
+      
+      // Handle specific error cases
+      let errorMessage = "Échec de la connexion avec le compte de démonstration"
+      
+      if (err.response?.data?.message) {
+        errorMessage = err.response.data.message
+      } else if (err.response?.data?.error) {
+        errorMessage = err.response.data.error
+      } else if (err.message?.includes("Account is inactive") || err.message?.includes("désactivé")) {
+        errorMessage = "Le compte de démonstration a été désactivé. Veuillez contacter l'administrateur."
+      } else if (err.message?.includes("Invalid email or password")) {
+        errorMessage = "Email ou mot de passe incorrect pour le compte de démonstration"
+      } else if (err.response?.status === 400) {
+        errorMessage = "Données de connexion invalides"
+      } else if (err.response?.status === 401) {
+        errorMessage = "Email ou mot de passe incorrect"
+      } else if (err.response?.status === 403) {
+        errorMessage = "Accès refusé. Le compte de démonstration pourrait être désactivé."
+      }
+      
+      setError(errorMessage)
     } finally {
       setIsLoading(false)
     }

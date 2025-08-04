@@ -20,6 +20,7 @@ interface PhoneDevice {
   serialNumber: string
   status: "available" | "assigned" | "maintenance" | "retired"
   assignedTo?: string
+  assignedToDepartment?: string
   purchaseDate: string
   warrantyExpiry: string
   condition: "excellent" | "good" | "fair" | "poor"
@@ -72,6 +73,7 @@ export default function AssignerPhonesPage() {
           serialNumber: p.serialNumber || "",
           status: (p.status || "available").toLowerCase(),
           assignedTo: p.assignedToName || "",
+          assignedToDepartment: p.assignedToDepartment || "",
           purchaseDate: p.purchaseDate || "",
           warrantyExpiry: p.warrantyExpiry || "",
           condition: p.condition || "good",
@@ -262,7 +264,7 @@ export default function AssignerPhonesPage() {
                       )
                     }
                     if (key === "price") {
-                      return <span>€{phone.price}</span>
+                      return <span>{phone.price} MAD</span>
                     }
                     if (key === "purchaseDate") {
                       return new Date(phone.purchaseDate).toLocaleDateString("fr-FR")
