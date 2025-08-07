@@ -26,9 +26,6 @@ import {
   Calendar,
 } from "lucide-react"
 import { useRouter } from "next/navigation"
-import { AttributionManagementApi } from "@/api/generated";
-import { getApiConfig } from "@/lib/apiClient";
-import { DataTable } from "@/components/data-table";
 
 interface Attribution {
   id: string
@@ -42,7 +39,7 @@ interface Attribution {
   assignedBy: string
   assignmentDate: string
   returnDate?: string
-  status: "active" | "pending" | "returned"
+  status: "ACTIVE" | "RETURNED" | "PENDING"
   notes?: string
 }
 
@@ -55,8 +52,6 @@ export default function AssignerAttributionsPage() {
   const [editingAttribution, setEditingAttribution] = useState<Attribution | null>(null)
   const { toast } = useToast()
   const router = useRouter()
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     // Check authentication
@@ -65,58 +60,86 @@ export default function AssignerAttributionsPage() {
       router.push("/")
       return
     }
-    fetchAttributions()
+    loadAttributions()
   }, [router])
 
   useEffect(() => {
     filterAttributions()
   }, [attributions, searchTerm, statusFilter])
 
-  const fetchAttributions = async () => {
-    setLoading(true)
-    setError(null)
-    try {
-      const token = localStorage.getItem("jwt_token")
-      const api = new AttributionManagementApi(getApiConfig(token))
-      const res = await api.getAttributions()
-      // Correctly extract attributions from backend response
-      let apiAttributions: any[] = [];
-      if (Array.isArray(res.data)) {
-        apiAttributions = res.data;
-      } else if (
-        res.data && typeof res.data === 'object' &&
-        res.data.data && typeof res.data.data === 'object' &&
-        Array.isArray((res.data.data as any).attributions)
-      ) {
-        apiAttributions = (res.data.data as any).attributions;
-      } else if (
-        res.data && typeof res.data === 'object' &&
-        Array.isArray((res.data as any).attributions)
-      ) {
-        apiAttributions = (res.data as any).attributions;
-      }
-      setAttributions(
-        (Array.isArray(apiAttributions) ? apiAttributions : []).map((a: any) => ({
-          id: String(a.id),
-          userId: String(a.userId),
-          userName: a.userName || "",
-          userEmail: a.userEmail || "",
-          phoneId: a.phoneId ? String(a.phoneId) : undefined,
-          phoneModel: a.phoneModel || undefined,
-          simCardId: a.simCardId ? String(a.simCardId) : undefined,
-          simCardNumber: a.simCardNumber || undefined,
-          assignedBy: a.assignedByName || "",
-          assignmentDate: a.assignmentDate || "",
-          returnDate: a.returnDate || undefined,
-          status: (a.status || "active").toLowerCase(),
-          notes: a.notes || undefined,
-        }))
-      )
-    } catch (err: any) {
-      setError("Erreur lors du chargement des attributions.")
-    } finally {
-      setLoading(false)
-    }
+  const loadAttributions = () => {
+    const mockAttributions: Attribution[] = [
+      {
+        id: "1",
+        userId: "user1",
+        userName: "Marie Dubois",
+        userEmail: "marie.dubois@company.com",
+        phoneId: "phone1",
+        phoneModel: "iPhone 13 Pro",
+        simCardId: "sim1",
+        simCardNumber: "+33 6 12 34 56 78",
+        assignedBy: "Randy Riley",
+        assignmentDate: "2024-01-10",
+        status: "ACTIVE",
+        notes: "Attribution complète avec téléphone et SIM",
+      },
+      {
+        id: "2",
+        userId: "user2",
+        userName: "Pierre Martin",
+        userEmail: "pierre.martin@company.com",
+        phoneId: "phone2",
+        phoneModel: "Samsung Galaxy S23",
+        simCardId: "sim2",
+        simCardNumber: "+33 6 98 76 54 32",
+        assignedBy: "Randy Riley",
+        assignmentDate: "2024-01-12",
+        status: "PENDING",
+        notes: "Attribution pour nouveau poste",
+      },
+      {
+        id: "3",
+        userId: "user3",
+        userName: "Sophie Laurent",
+        userEmail: "sophie.laurent@company.com",
+        phoneId: "phone3",
+        phoneModel: "iPhone 12",
+        simCardId: "sim3",
+        simCardNumber: "+33 6 11 22 33 44",
+        assignedBy: "Randy Riley",
+        assignmentDate: "2024-01-05",
+        returnDate: "2024-01-14",
+        status: "RETURNED",
+        notes: "Retour pour changement de poste",
+      },
+      {
+        id: "4",
+        userId: "user4",
+        userName: "Thomas Durand",
+        userEmail: "thomas.durand@company.com",
+        phoneId: "phone4",
+        phoneModel: "Pixel 8",
+        simCardId: "sim4",
+        simCardNumber: "+33 6 55 66 77 88",
+        assignedBy: "Randy Riley",
+        assignmentDate: "2024-02-01",
+        status: "ACTIVE",
+        notes: "Attribution standard",
+      },
+      {
+        id: "5",
+        userId: "user5",
+        userName: "Julie Moreau",
+        userEmail: "julie.moreau@company.com",
+        simCardId: "sim5",
+        simCardNumber: "+33 6 99 88 77 66",
+        assignedBy: "Randy Riley",
+        assignmentDate: "2024-02-05",
+        status: "PENDING",
+        notes: "Attribution SIM uniquement",
+      },
+    ]
+    setAttributions(mockAttributions)
   }
 
   const filterAttributions = () => {
@@ -165,7 +188,7 @@ export default function AssignerAttributionsPage() {
     setAttributions(
       attributions.map((attr) =>
         attr.id === id
-          ? { ...attr, status: "returned" as const, returnDate: new Date().toISOString().split("T")[0] }
+          ? { ...attr, status: "RETURNED" as const, returnDate: new Date().toISOString().split("T")[0] }
           : attr,
       ),
     )
@@ -201,7 +224,7 @@ export default function AssignerAttributionsPage() {
         ...attributionData,
         assignedBy: "Randy Riley",
         assignmentDate: new Date().toISOString().split("T")[0],
-        status: "active",
+        status: "ACTIVE",
       } as Attribution
       setAttributions([...attributions, newAttribution])
       toast({
@@ -215,89 +238,163 @@ export default function AssignerAttributionsPage() {
 
   const getStatusBadge = (status: string) => {
     switch (status) {
-      case "active":
+      case "ACTIVE":
         return <Badge className="bg-green-100 text-green-800">Actif</Badge>
-      case "pending":
+      case "PENDING":
         return <Badge className="bg-yellow-100 text-yellow-800">En attente</Badge>
-      case "returned":
+      case "RETURNED":
         return <Badge className="bg-gray-100 text-gray-800">Retourné</Badge>
       default:
         return <Badge variant="secondary">{status}</Badge>
     }
   }
 
-  const attributionColumns = [
-    {
-      header: "Utilisateur",
-      accessorKey: "userName",
-      cell: (info: any) => (
+  return (
+    <div className="flex min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100">
+      <Sidebar activeItem="attributions" onLogout={handleLogout} />
+
+      <div className="flex-1 ml-64">
+        <div className="p-8">
+          {/* Header */}
+          <div className="flex items-center justify-between mb-8">
+            <div>
+              <h1 className="text-3xl font-bold text-gray-900">Attributions</h1>
+              <p className="text-gray-600 mt-2">Gérez les attributions de téléphones et cartes SIM</p>
+            </div>
+            <Button onClick={() => setShowModal(true)} className="bg-blue-600 hover:bg-blue-700">
+              <Plus className="h-4 w-4 mr-2" />
+              Nouvelle Attribution
+            </Button>
+          </div>
+
+          {/* Search and Filters */}
+          <div className="flex items-center space-x-4 mb-6">
+            <div className="relative flex-1 max-w-sm">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
+              <Input
+                placeholder="Rechercher une attribution..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="pl-10 bg-white/80"
+              />
+            </div>
+            <select
+              className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white/80"
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+            >
+              <option value="all">Tous les statuts</option>
+              <option value="active">Actif</option>
+              <option value="pending">En attente</option>
+              <option value="returned">Retourné</option>
+            </select>
+            <Button variant="outline" className="bg-white/80">
+              <Filter className="h-4 w-4 mr-2" />
+              Filtres
+            </Button>
+          </div>
+
+          {/* Attributions Table */}
+          <Card className="bg-white/90 backdrop-blur-xl border-0 shadow-xl">
+            <CardHeader>
+              <CardTitle className="text-xl font-bold">
+                Liste des Attributions ({filteredAttributions.length})
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {filteredAttributions.length === 0 ? (
+                <div className="text-center py-12">
+                  <Phone className="h-16 w-16 text-gray-400 mx-auto mb-4" />
+                  <p className="text-gray-500 text-lg">Aucune attribution trouvée</p>
+                  <p className="text-gray-400 mt-2">
+                    {searchTerm || statusFilter !== "all"
+                      ? "Essayez de modifier vos critères de recherche"
+                      : "Créez votre première attribution"}
+                  </p>
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Utilisateur
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Téléphone
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Carte SIM
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Date d'attribution
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Statut
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Assigné par
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Actions
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody className="bg-white divide-y divide-gray-200">
+                      {filteredAttributions.map((attribution) => (
+                        <tr key={attribution.id} className="hover:bg-gray-50 transition-colors">
+                          <td className="px-6 py-4 whitespace-nowrap">
                             <div className="flex items-center space-x-3">
                               <Avatar className="h-8 w-8">
                                 <AvatarFallback className="bg-gradient-to-r from-blue-500 to-purple-600 text-white text-xs">
-              {info.row.original.userName
+                                  {attribution.userName
                                     .split(" ")
                                     .map((n) => n[0])
                                     .join("")}
                                 </AvatarFallback>
                               </Avatar>
                               <div>
-            <p className="font-medium text-gray-900">{info.row.original.userName}</p>
-            <p className="text-sm text-gray-500">{info.row.original.userEmail}</p>
+                                <p className="font-medium text-gray-900">{attribution.userName}</p>
+                                <p className="text-sm text-gray-500">{attribution.userEmail}</p>
                               </div>
                             </div>
-      ),
-    },
-    {
-      header: "Téléphone",
-      accessorKey: "phoneModel",
-      cell: (info: any) => (
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            {attribution.phoneModel ? (
                               <div className="flex items-center space-x-2">
                                 <Phone className="h-4 w-4 text-blue-500" />
-          <span className="text-sm text-gray-900">{info.row.original.phoneModel || "Non assigné"}</span>
+                                <span className="text-sm text-gray-900">{attribution.phoneModel}</span>
                               </div>
-      ),
-    },
-    {
-      header: "Carte SIM",
-      accessorKey: "simCardNumber",
-      cell: (info: any) => (
+                            ) : (
+                              <span className="text-gray-400 text-sm">Non assigné</span>
+                            )}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            {attribution.simCardNumber ? (
                               <div className="flex items-center space-x-2">
                                 <CreditCard className="h-4 w-4 text-green-500" />
-          <span className="font-mono text-sm text-gray-900">{info.row.original.simCardNumber || "Non assignée"}</span>
+                                <span className="font-mono text-sm text-gray-900">{attribution.simCardNumber}</span>
                               </div>
-      ),
-    },
-    {
-      header: "Date d'attribution",
-      accessorKey: "assignmentDate",
-      cell: (info: any) => (
+                            ) : (
+                              <span className="text-gray-400 text-sm">Non assignée</span>
+                            )}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
                             <div className="flex items-center space-x-2">
                               <Calendar className="h-4 w-4 text-gray-400" />
                               <span className="text-sm text-gray-900">
-            {new Date(info.row.original.assignmentDate).toLocaleDateString("fr-FR")}
+                                {new Date(attribution.assignmentDate).toLocaleDateString("fr-FR")}
                               </span>
                             </div>
-      ),
-    },
-    {
-      header: "Statut",
-      accessorKey: "status",
-      cell: (info: any) => getStatusBadge(info.row.original.status),
-    },
-    {
-      header: "Assigné par",
-      accessorKey: "assignedBy",
-      cell: (info: any) => (
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">{getStatusBadge(attribution.status)}</td>
+                          <td className="px-6 py-4 whitespace-nowrap">
                             <div className="flex items-center space-x-2">
                               <User className="h-4 w-4 text-gray-400" />
-          <span className="text-sm text-gray-900">{info.row.original.assignedBy}</span>
+                              <span className="text-sm text-gray-900">{attribution.assignedBy}</span>
                             </div>
-      ),
-    },
-    {
-      header: "Actions",
-      accessorKey: "actions",
-      cell: (info: any) => (
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
                             <DropdownMenu>
                               <DropdownMenuTrigger asChild>
                                 <Button variant="ghost" className="h-8 w-8 p-0">
@@ -305,93 +402,49 @@ export default function AssignerAttributionsPage() {
                                 </Button>
                               </DropdownMenuTrigger>
                               <DropdownMenuContent align="end">
-            <DropdownMenuItem onClick={() => handleView(info.row.original)}>
+                                <DropdownMenuItem onClick={() => handleView(attribution)}>
                                   <Eye className="mr-2 h-4 w-4" />
                                   Voir détails
                                 </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => handleEdit(info.row.original)}>
+                                <DropdownMenuItem onClick={() => handleEdit(attribution)}>
                                   <Edit className="mr-2 h-4 w-4" />
                                   Modifier
                                 </DropdownMenuItem>
-            {info.row.original.status === "active" && (
-              <DropdownMenuItem onClick={() => handleReturn(info.row.original.id)}>
+                                {attribution.status === "ACTIVE" && (
+                                  <DropdownMenuItem onClick={() => handleReturn(attribution.id)}>
                                     <RotateCcw className="mr-2 h-4 w-4" />
                                     Retourner
                                   </DropdownMenuItem>
                                 )}
-            <DropdownMenuItem onClick={() => handleDelete(info.row.original.id)} className="text-red-600">
+                                <DropdownMenuItem onClick={() => handleDelete(attribution.id)} className="text-red-600">
                                   <Trash2 className="mr-2 h-4 w-4" />
                                   Supprimer
                                 </DropdownMenuItem>
                               </DropdownMenuContent>
                             </DropdownMenu>
-      ),
-    },
-  ];
-
-  return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100">
-      <div className="flex">
-        <Sidebar activeItem="attributions" onLogout={handleLogout} />
-
-        <div className="flex-1 p-8">
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between">
-              <CardTitle>Attributions</CardTitle>
-              <div className="flex items-center space-x-2">
-                <Button onClick={() => setShowModal(true)}>
-                  <Plus className="h-4 w-4 mr-2" /> Ajouter
-                </Button>
-              </div>
-            </CardHeader>
-            <CardContent>
-              {loading ? (
-                <div className="py-8 text-center text-gray-500">Chargement...</div>
-              ) : error ? (
-                <div className="py-8 text-center text-red-500">{error}</div>
-              ) : (
-                <DataTable
-                  data={filteredAttributions}
-                  columns={attributionColumns}
-                  onRowClick={handleView}
-                  renderCell={(attr, key) => {
-                    if (key === "status") {
-                      return getStatusBadge(attr.status)
-                    }
-                    if (key === "assignmentDate") {
-                      return <span>{new Date(attr.assignmentDate).toLocaleDateString("fr-FR")}</span>
-                    }
-                    if (key === "actions") {
-                      return (
-                        <div className="flex items-center space-x-2">
-                          <Button size="sm" variant="outline" onClick={() => handleEdit(attr)}>
-                            <Edit className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => handleDelete(attr.id)}
-                            className="text-red-600 hover:text-red-700"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
-                      )
-                    }
-                    return attr[key as keyof Attribution] || "-"
-                  }}
-                />
               )}
             </CardContent>
           </Card>
         </div>
       </div>
+
+      {/* Attribution Modal */}
       <AttributionModal
         isOpen={showModal}
-        onClose={() => setShowModal(false)}
+        onClose={() => {
+          setShowModal(false)
+          setEditingAttribution(null)
+        }}
         onSave={handleSaveAttribution}
         attribution={editingAttribution}
       />
+
       <Toaster />
     </div>
   )

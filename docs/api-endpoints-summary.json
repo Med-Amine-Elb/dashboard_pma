@@ -84,8 +84,5 @@
     "assigner": "Limited admin access - cannot manage users or system settings",
     "user": "Read own data, create requests, view assigned equipment"
   },
-  "realTimeFeatures": {
-    "websocket": "/api/ws",
-    "events": ["notification:new", "request:updated", "message:new", "attribution:created", "phone:status_changed"]
-  }
+
 }

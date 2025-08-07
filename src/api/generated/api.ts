@@ -19,11 +19,11 @@ export * from './apis/attribution-management-api';
 export * from './apis/audit-logs-api';
 export * from './apis/authentication-api';
 export * from './apis/calendar-event-controller-api';
-export * from './apis/conversation-controller-api';
+
 export * from './apis/dashboard-reporting-api';
 export * from './apis/export-controller-api';
 export * from './apis/file-upload-controller-api';
-export * from './apis/message-controller-api';
+
 export * from './apis/notifications-api';
 export * from './apis/phone-management-api';
 export * from './apis/request-management-api';

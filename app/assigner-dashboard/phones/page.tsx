@@ -6,11 +6,9 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { Search, Bell, Globe, Phone, User, Eye, Edit, Trash2 } from "lucide-react"
+import { Search, Bell, Globe, Phone, User, Eye } from "lucide-react"
 import { Sidebar } from "@/components/sidebar"
 import { DataTable } from "@/components/data-table"
-import { PhoneManagementApi } from "@/api/generated";
-import { getApiConfig } from "@/lib/apiClient";
 
 interface PhoneDevice {
   id: string
@@ -20,7 +18,6 @@ interface PhoneDevice {
   serialNumber: string
   status: "available" | "assigned" | "maintenance" | "retired"
   assignedTo?: string
-  assignedToDepartment?: string
   purchaseDate: string
   warrantyExpiry: string
   condition: "excellent" | "good" | "fair" | "poor"
@@ -35,8 +32,6 @@ export default function AssignerPhonesPage() {
   const [filteredPhones, setFilteredPhones] = useState<PhoneDevice[]>([])
   const [searchTerm, setSearchTerm] = useState("")
   const [statusFilter, setStatusFilter] = useState("all")
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     // Check authentication
@@ -48,45 +43,103 @@ export default function AssignerPhonesPage() {
       return
     }
 
-    fetchPhones()
+    loadPhones()
   }, [])
 
   useEffect(() => {
     filterPhones()
   }, [phones, searchTerm, statusFilter])
 
-  const fetchPhones = async () => {
-    setLoading(true)
-    setError(null)
-    try {
-      const token = localStorage.getItem("jwt_token")
-      const api = new PhoneManagementApi(getApiConfig(token))
-      const res = await api.getPhones()
-      // Try to find the array of phones in the response
-      const apiPhones = Array.isArray(res.data) ? res.data : (res.data.content || res.data.phones || [])
-      setPhones(
-        apiPhones.map((p: any) => ({
-          id: String(p.id),
-          model: p.model,
-          brand: p.brand,
-          imei: p.imei || "",
-          serialNumber: p.serialNumber || "",
-          status: (p.status || "available").toLowerCase(),
-          assignedTo: p.assignedToName || "",
-          assignedToDepartment: p.assignedToDepartment || "",
-          purchaseDate: p.purchaseDate || "",
-          warrantyExpiry: p.warrantyExpiry || "",
-          condition: p.condition || "good",
-          storage: p.storage || "",
-          color: p.color || "",
-          price: p.price || 0,
-        }))
-      )
-    } catch (err: any) {
-      setError("Erreur lors du chargement des téléphones.")
-    } finally {
-      setLoading(false)
-    }
+  const loadPhones = () => {
+    const mockPhones: PhoneDevice[] = [
+      {
+        id: "1",
+        model: "iPhone 15 Pro",
+        brand: "Apple",
+        imei: "123456789012345",
+        serialNumber: "F2LW8J9K2L",
+        status: "assigned",
+        assignedTo: "Jean Dupont",
+        purchaseDate: "2023-10-15",
+        warrantyExpiry: "2025-10-15",
+        condition: "excellent",
+        storage: "256GB",
+        color: "Titane Naturel",
+        price: 1229,
+      },
+      {
+        id: "2",
+        model: "Galaxy S24",
+        brand: "Samsung",
+        imei: "987654321098765",
+        serialNumber: "R58N123456",
+        status: "assigned",
+        assignedTo: "Marie Martin",
+        purchaseDate: "2024-02-01",
+        warrantyExpiry: "2026-02-01",
+        condition: "excellent",
+        storage: "512GB",
+        color: "Violet",
+        price: 899,
+      },
+      {
+        id: "3",
+        model: "Pixel 8",
+        brand: "Google",
+        imei: "456789123456789",
+        serialNumber: "GA02345678",
+        status: "available",
+        purchaseDate: "2023-12-10",
+        warrantyExpiry: "2025-12-10",
+        condition: "good",
+        storage: "128GB",
+        color: "Obsidienne",
+        price: 699,
+      },
+      {
+        id: "4",
+        model: "iPhone 14",
+        brand: "Apple",
+        imei: "789123456789123",
+        serialNumber: "F2LW8J9K3M",
+        status: "maintenance",
+        purchaseDate: "2022-09-20",
+        warrantyExpiry: "2024-09-20",
+        condition: "fair",
+        storage: "128GB",
+        color: "Bleu",
+        price: 909,
+      },
+      {
+        id: "5",
+        model: "iPhone 13",
+        brand: "Apple",
+        imei: "111222333444555",
+        serialNumber: "F2LW8J9K4N",
+        status: "available",
+        purchaseDate: "2021-09-24",
+        warrantyExpiry: "2023-09-24",
+        condition: "good",
+        storage: "128GB",
+        color: "Rose",
+        price: 809,
+      },
+      {
+        id: "6",
+        model: "Galaxy S23",
+        brand: "Samsung",
+        imei: "666777888999000",
+        serialNumber: "R58N654321",
+        status: "available",
+        purchaseDate: "2023-02-17",
+        warrantyExpiry: "2025-02-17",
+        condition: "excellent",
+        storage: "256GB",
+        color: "Crème",
+        price: 799,
+      },
+    ]
+    setPhones(mockPhones)
   }
 
   const filterPhones = () => {
@@ -225,11 +278,6 @@ export default function AssignerPhonesPage() {
                 </div>
               </CardHeader>
               <CardContent>
-                {loading ? (
-                  <div className="py-8 text-center text-gray-500">Chargement...</div>
-                ) : error ? (
-                  <div className="py-8 text-center text-red-500">{error}</div>
-                ) : (
                 <DataTable
                   data={filteredPhones}
                   columns={phoneColumns}
@@ -264,7 +312,7 @@ export default function AssignerPhonesPage() {
                       )
                     }
                     if (key === "price") {
-                      return <span>{phone.price} MAD</span>
+                      return <span>€{phone.price}</span>
                     }
                     if (key === "purchaseDate") {
                       return new Date(phone.purchaseDate).toLocaleDateString("fr-FR")
@@ -272,7 +320,6 @@ export default function AssignerPhonesPage() {
                     return phone[key as keyof PhoneDevice] || "-"
                   }}
                 />
-                )}
               </CardContent>
             </Card>
           </div>

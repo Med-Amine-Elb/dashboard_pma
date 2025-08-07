@@ -717,84 +717,7 @@
 
 ---
 
-## Messages Management
 
-### GET /api/conversations
-**Description**: Get user conversations
-**Headers**: `Authorization: Bearer <token>`
-**Response**:
-\`\`\`json
-{
-  "success": true,
-  "data": [
-    {
-      "id": "conv_id",
-      "participantId": "user_id",
-      "participantName": "Jean Dupont",
-      "participantAvatar": "avatar_url",
-      "lastMessage": "Merci pour l'attribution du nouveau téléphone !",
-      "lastMessageTime": "2024-01-20T10:30:00Z",
-      "unreadCount": 2,
-      "isOnline": true
-    }
-  ]
-}
-\`\`\`
-
-### GET /api/conversations/:id/messages
-**Description**: Get messages in conversation
-**Query Parameters**:
-- `page`, `limit`
-
-**Response**:
-\`\`\`json
-{
-  "success": true,
-  "data": {
-    "messages": [
-      {
-        "id": "msg_id",
-        "conversationId": "conv_id",
-        "senderId": "user_id",
-        "senderName": "Jean Dupont",
-        "content": "Bonjour, j'ai reçu votre message concernant l'attribution",
-        "timestamp": "2024-01-20T10:25:00Z",
-        "read": true,
-        "starred": false
-      }
-    ],
-    "pagination": {
-      "page": 1,
-      "limit": 50,
-      "total": 100,
-      "totalPages": 2
-    }
-  }
-}
-\`\`\`
-
-### POST /api/conversations/:id/messages
-**Description**: Send message in conversation
-**Request Body**:
-\`\`\`json
-{
-  "content": "Merci pour l'attribution du nouveau téléphone !"
-}
-\`\`\`
-
-### PUT /api/messages/:id/read
-**Description**: Mark message as read
-
-### PUT /api/messages/:id/star
-**Description**: Star/unstar message
-**Request Body**:
-\`\`\`json
-{
-  "starred": true
-}
-\`\`\`
-
----
 
 ## Dashboard Analytics
 
@@ -1029,37 +952,6 @@ All endpoints return consistent error responses:
 
 ---
 
-## WebSocket Events (Real-time Features)
 
-### Connection:
-\`\`\`javascript
-const socket = io('/api/ws', {
-  auth: {
-    token: 'jwt_token_here'
-  }
-});
-\`\`\`
-
-### Events:
-- `notification:new` - New notification received
-- `request:updated` - Request status changed
-- `message:new` - New message in conversation
-- `attribution:created` - New attribution created
-- `phone:status_changed` - Phone status updated
-
-### Example Event:
-\`\`\`json
-{
-  "event": "notification:new",
-  "data": {
-    "id": "notif_id",
-    "title": "Demande approuvée",
-    "message": "Votre demande de remplacement a été approuvée",
-    "type": "success"
-  }
-}
-\`\`\`
-
----
 
 This API documentation covers all the endpoints needed to make the TéléphoneManager system work exactly as implemented in the frontend. Each endpoint includes proper authentication, role-based access control, pagination, filtering, and error handling.

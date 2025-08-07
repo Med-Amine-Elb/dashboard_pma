@@ -1,15 +1,15 @@
 export * from './attribution-dto';
 export * from './calendar-event-dto';
-export * from './conversation-dto';
+
 export * from './file-upload-dto';
 export * from './login-data';
 export * from './login-request';
 export * from './login-response';
-export * from './message-dto';
+
 export * from './page-calendar-event-dto';
-export * from './page-conversation-dto';
+
 export * from './page-file-upload-dto';
-export * from './page-message-dto';
+
 export * from './page-system-settings-dto';
 export * from './pageable-object';
 export * from './phone-dto';
