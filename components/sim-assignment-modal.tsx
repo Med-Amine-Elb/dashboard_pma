@@ -6,9 +6,11 @@ import { useState, useEffect } from "react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Badge } from "@/components/ui/badge"
+import { UserManagementApi } from "@/api/generated"
+import { getApiConfig } from "@/lib/apiClient"
 
 interface SimCard {
   id: string
@@ -26,12 +28,6 @@ interface User {
   department: string
 }
 
-interface Phone {
-  id: string
-  model: string
-  brand: string
-}
-
 interface SimAssignmentModalProps {
   isOpen: boolean
   onClose: () => void
@@ -47,42 +43,133 @@ interface SimAssignmentModalProps {
 
 export function SimAssignmentModal({ isOpen, onClose, onSave, simCard }: SimAssignmentModalProps) {
   const [selectedUserId, setSelectedUserId] = useState("")
-  const [selectedPhoneId, setSelectedPhoneId] = useState("")
   const [notes, setNotes] = useState("")
-  const [users] = useState<User[]>([
-    { id: "1", name: "Jean Dupont", email: "jean.dupont@company.com", department: "IT" },
-    { id: "2", name: "Marie Martin", email: "marie.martin@company.com", department: "Sales" },
-    { id: "3", name: "Pierre Durand", email: "pierre.durand@company.com", department: "Marketing" },
-    { id: "4", name: "Sophie Dubois", email: "sophie.dubois@company.com", department: "HR" },
-  ])
-  const [phones] = useState<Phone[]>([
-    { id: "1", model: "iPhone 15 Pro", brand: "Apple" },
-    { id: "2", model: "Galaxy S24", brand: "Samsung" },
-    { id: "3", model: "Pixel 8", brand: "Google" },
-    { id: "4", model: "iPhone 14", brand: "Apple" },
-  ])
+  const [users, setUsers] = useState<User[]>([])
+  const [filteredUsers, setFilteredUsers] = useState<User[]>([])
+  const [searchTerm, setSearchTerm] = useState("")
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false)
+  const [loading, setLoading] = useState(false)
 
   useEffect(() => {
     if (!isOpen) {
       setSelectedUserId("")
-      setSelectedPhoneId("")
       setNotes("")
+      setSearchTerm("")
+      setIsDropdownOpen(false)
+    } else {
+      fetchUsers()
     }
   }, [isOpen])
+
+  const fetchUsers = async () => {
+    setLoading(true)
+    try {
+      const token = localStorage.getItem("jwt_token")
+      if (!token) return
+
+      const userApi = new UserManagementApi(getApiConfig(token))
+      
+      // Fetch all users with pagination to get complete list
+      const usersRes = await userApi.getUsers(
+        1,        // page
+        1000,     // limit - high number to get all users
+        undefined, // search
+        undefined, // department
+        undefined, // status
+        undefined  // role
+      )
+      
+      console.log("Users API Response:", usersRes)
+      
+      const responseData = usersRes.data as any
+      let apiUsers: any[] = []
+      
+      // Handle different response structures
+      if (responseData.success && responseData.data) {
+        apiUsers = (responseData.data.users as any[]) || []
+      } else if (responseData.users) {
+        apiUsers = (responseData.users as any[]) || []
+      } else if (Array.isArray(responseData)) {
+        apiUsers = responseData
+      }
+      
+      console.log("Extracted users:", apiUsers)
+      
+      const transformedUsers: User[] = apiUsers.map((user: any) => ({
+        id: user.id?.toString() || "",
+        name: user.name || user.username || "",
+        email: user.email || "",
+        department: user.department || "",
+      }))
+      
+      console.log("Transformed users:", transformedUsers)
+      
+      setUsers(transformedUsers)
+      setFilteredUsers(transformedUsers)
+    } catch (error) {
+      console.error("Error fetching users:", error)
+      setUsers([])
+      setFilteredUsers([])
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleSearchChange = (value: string) => {
+    setSearchTerm(value)
+    
+    console.log("Search term:", value)
+    console.log("Available users:", users)
+    
+    if (!value.trim()) {
+      setFilteredUsers(users)
+      setIsDropdownOpen(false) // Hide dropdown when search is empty
+      return
+    }
+    
+    // Show dropdown only when user starts typing
+    setIsDropdownOpen(true)
+    
+    const filtered = users.filter(user => 
+      user.name.toLowerCase().includes(value.toLowerCase()) ||
+      user.email.toLowerCase().includes(value.toLowerCase()) ||
+      user.department.toLowerCase().includes(value.toLowerCase())
+    )
+    
+    console.log("Filtered users:", filtered)
+    setFilteredUsers(filtered)
+  }
+
+  const handleUserSelect = (user: User) => {
+    setSelectedUserId(user.id)
+    setSearchTerm(user.name)
+    setIsDropdownOpen(false)
+  }
+
+  const handleInputFocus = () => {
+    // Only show dropdown if there's a search term or if we have users to show
+    if (searchTerm.trim() || users.length > 0) {
+      setIsDropdownOpen(true)
+    }
+  }
+
+  const handleInputBlur = () => {
+    // Delay closing to allow for click on dropdown items
+    setTimeout(() => {
+      setIsDropdownOpen(false)
+    }, 200)
+  }
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
 
     const selectedUser = users.find((u) => u.id === selectedUserId)
-    const selectedPhone = phones.find((p) => p.id === selectedPhoneId)
 
     if (!selectedUser) return
 
     onSave({
       userId: selectedUserId,
       userName: selectedUser.name,
-      phoneId: selectedPhoneId || undefined,
-      phoneName: selectedPhone ? `${selectedPhone.brand} ${selectedPhone.model}` : undefined,
       notes: notes || undefined,
     })
   }
@@ -122,40 +209,50 @@ export function SimAssignmentModal({ isOpen, onClose, onSave, simCard }: SimAssi
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-2">
             <Label htmlFor="user">Utilisateur *</Label>
-            <Select value={selectedUserId} onValueChange={setSelectedUserId} required>
-              <SelectTrigger>
-                <SelectValue placeholder="Sélectionner un utilisateur" />
-              </SelectTrigger>
-              <SelectContent>
-                {users.map((user) => (
-                  <SelectItem key={user.id} value={user.id}>
-                    <div className="flex items-center justify-between w-full">
-                      <span>{user.name}</span>
-                      <Badge variant="outline" className="ml-2">
-                        {user.department}
-                      </Badge>
+            <div className="relative">
+                             <Input
+                 id="user"
+                 type="text"
+                 placeholder="Rechercher un utilisateur..."
+                 value={searchTerm}
+                 onChange={(e) => handleSearchChange(e.target.value)}
+                 onFocus={handleInputFocus}
+                 onBlur={handleInputBlur}
+                 required
+                 className="w-full"
+               />
+              {isDropdownOpen && (
+                <div className="absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-60 overflow-y-auto">
+                  {loading ? (
+                    <div className="p-4 text-center text-gray-500">
+                      Chargement des utilisateurs...
                     </div>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="phone">Téléphone (optionnel)</Label>
-            <Select value={selectedPhoneId} onValueChange={setSelectedPhoneId}>
-              <SelectTrigger>
-                <SelectValue placeholder="Sélectionner un téléphone (optionnel)" />
-              </SelectTrigger>
-              <SelectContent>
-                {phones.map((phone) => (
-                  <SelectItem key={phone.id} value={phone.id}>
-                    {phone.brand} {phone.model}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <p className="text-xs text-gray-500">Vous pouvez assigner la carte SIM seule ou avec un téléphone</p>
+                  ) : filteredUsers.length === 0 ? (
+                    <div className="p-4 text-center text-gray-500">
+                      Aucun utilisateur trouvé
+                    </div>
+                  ) : (
+                    filteredUsers.map((user) => (
+                      <div
+                        key={user.id}
+                        className="p-3 hover:bg-gray-50 cursor-pointer border-b border-gray-100 last:border-b-0"
+                        onClick={() => handleUserSelect(user)}
+                      >
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <div className="font-medium text-gray-900">{user.name}</div>
+                            <div className="text-sm text-gray-500">{user.email}</div>
+                          </div>
+                          <Badge variant="outline" className="ml-2">
+                            {user.department}
+                          </Badge>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              )}
+            </div>
           </div>
 
           <div className="space-y-2">
