@@ -506,7 +506,7 @@ export default function SimAssignmentsPage() {
                           return <Badge className={getStatusColor(sim.status)}>{sim.status}</Badge>
                         }
                         if (key === "monthlyFee") {
-                          return <span>€{sim.monthlyFee}</span>
+                          return <span>{sim.monthlyFee} MAD</span>
                         }
                         if (key === "actions") {
                           return (

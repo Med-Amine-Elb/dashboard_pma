@@ -37,14 +37,30 @@ interface PhoneModalProps {
   phone?: Phone | null
 }
 
+interface FormData {
+  model: string
+  brand: string
+  imei: string
+  serialNumber: string
+  status: "AVAILABLE" | "ASSIGNED" | "LOST" | "DAMAGED"
+  condition: "EXCELLENT" | "GOOD" | "FAIR" | "POOR"
+  storage: string
+  color: string
+  price: string
+  assignedTo: string
+  department: string
+  purchaseDate: string
+  notes: string
+}
+
 export function PhoneModal({ isOpen, onClose, onSave, phone }: PhoneModalProps) {
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<FormData>({
     model: "",
     brand: "",
     imei: "",
     serialNumber: "",
-    status: "AVAILABLE" as const,
-    condition: "EXCELLENT" as const,
+    status: "AVAILABLE",
+    condition: "EXCELLENT",
     storage: "",
     color: "",
     price: "",
@@ -71,7 +87,7 @@ export function PhoneModal({ isOpen, onClose, onSave, phone }: PhoneModalProps) 
       "Galaxy S25 Ultra",
       "Galaxy Z Fold7",
       "Galaxy Z Flip7",
-      "Galaxy Z Flip7 FE"
+      "Galaxy Z Flip7 FE"
     ]
   };
 
@@ -83,7 +99,7 @@ export function PhoneModal({ isOpen, onClose, onSave, phone }: PhoneModalProps) 
     { value: "1TB", label: "1 TB" }
   ];
 
-  const colorOptions = {
+  const colorOptions: Record<string, string[]> = {
     // Apple iPhone 16 / 16 Plus
     "iPhone 16": ["Black", "White", "Pink", "Teal", "Ultramarine"],
     "iPhone 16 Plus": ["Black", "White", "Pink", "Teal", "Ultramarine"],
@@ -122,10 +138,9 @@ export function PhoneModal({ isOpen, onClose, onSave, phone }: PhoneModalProps) 
       try {
         const userApi = new UserManagementApi(getApiConfig(token));
         const usersRes = await userApi.getUsers();
-        setUsers(usersRes.data.data?.users || []);
-        // Optionally fetch brands and departments from backend if you have endpoints
-        // setBrands(await fetchBrands());
-        // setDepartments(await fetchDepartments());
+        const responseData = usersRes.data as any;
+        setUsers(responseData.data?.users || responseData.users || []);
+
       } catch (err) {
         setUsers([]); setBrands([]); setDepartments([]);
       }
@@ -141,7 +156,7 @@ export function PhoneModal({ isOpen, onClose, onSave, phone }: PhoneModalProps) 
         imei: phone.imei,
         serialNumber: phone.serialNumber || "",
         status: phone.status,
-        condition: phone.condition || "EXCELLENT",
+        condition: phone.condition,
         storage: phone.storage || "",
         color: phone.color || "",
         price: phone.price ? phone.price.toString() : "",
@@ -175,13 +190,25 @@ export function PhoneModal({ isOpen, onClose, onSave, phone }: PhoneModalProps) 
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    let dataToSave = { ...formData };
+    let dataToSave: Partial<Phone> = { 
+      model: formData.model,
+      brand: formData.brand,
+      imei: formData.imei,
+      serialNumber: formData.serialNumber,
+      status: formData.status,
+      condition: formData.condition,
+      storage: formData.storage,
+      color: formData.color,
+      price: formData.price === "" ? 0 : Number(formData.price),
+      assignedTo: formData.assignedTo,
+      department: formData.department,
+      purchaseDate: formData.purchaseDate,
+      notes: formData.notes,
+    };
     if (formData.brand === "Autre") {
       dataToSave.brand = customBrand;
       dataToSave.model = customModel;
     }
-    // Convert price to number if not empty
-    dataToSave.price = dataToSave.price === "" ? 0 : Number(dataToSave.price);
     onSave(dataToSave);
   }
 
@@ -337,10 +364,10 @@ export function PhoneModal({ isOpen, onClose, onSave, phone }: PhoneModalProps) 
                 type="text"
                 inputMode="decimal"
                 pattern="[0-9]*"
-                value={formData.price === 0 ? "" : formData.price ?? ""}
+                value={formData.price}
                 onChange={e => {
                   const val = e.target.value.replace(/[^0-9.]/g, "");
-                  setFormData({ ...formData, price: val === "" ? undefined : val });
+                  setFormData({ ...formData, price: val });
                 }}
                 placeholder="Prix (MAD)"
               />
@@ -349,7 +376,7 @@ export function PhoneModal({ isOpen, onClose, onSave, phone }: PhoneModalProps) 
               <Label htmlFor="condition">État</Label>
               <Select
                 value={formData.condition}
-                onValueChange={(value: any) => setFormData({ ...formData, condition: value })}
+                onValueChange={(value: "EXCELLENT" | "GOOD" | "FAIR" | "POOR") => setFormData({ ...formData, condition: value })}
               >
                 <SelectTrigger>
                   <SelectValue />

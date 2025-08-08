@@ -53,7 +53,7 @@ export function Sidebar({ activeItem, onLogout }: SidebarProps) {
         },
         {
           id: "sim-assignments",
-          label: "Attribution SIM",
+          label: "Cartes SIM",
           icon: CreditCard,
           href: "/assigner-dashboard/sim-assignments",
         },

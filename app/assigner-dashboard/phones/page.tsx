@@ -6,9 +6,13 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { Search, Bell, Globe, Phone, User, Eye } from "lucide-react"
+import { Search, Bell, Globe, Phone, User, Eye, ChevronLeft, ChevronRight } from "lucide-react"
 import { Sidebar } from "@/components/sidebar"
 import { DataTable } from "@/components/data-table"
+import { useToast } from "@/hooks/use-toast"
+import { PhoneManagementApi } from "@/api/generated/apis/phone-management-api"
+import { getApiConfig } from "@/lib/apiClient"
+import { PhoneDto } from "@/api/generated/models"
 
 interface PhoneDevice {
   id: string
@@ -16,14 +20,23 @@ interface PhoneDevice {
   brand: string
   imei: string
   serialNumber: string
-  status: "available" | "assigned" | "maintenance" | "retired"
+  status: "available" | "assigned" | "lost" | "damaged"
   assignedTo?: string
+  assignedDate?: string
   purchaseDate: string
   warrantyExpiry: string
   condition: "excellent" | "good" | "fair" | "poor"
   storage: string
   color: string
   price: number
+  notes?: string
+}
+
+interface PaginationInfo {
+  page: number
+  limit: number
+  total: number
+  totalPages: number
 }
 
 export default function AssignerPhonesPage() {
@@ -32,6 +45,15 @@ export default function AssignerPhonesPage() {
   const [filteredPhones, setFilteredPhones] = useState<PhoneDevice[]>([])
   const [searchTerm, setSearchTerm] = useState("")
   const [statusFilter, setStatusFilter] = useState("all")
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [pagination, setPagination] = useState<PaginationInfo>({
+    page: 1,
+    limit: 10,
+    total: 0,
+    totalPages: 0,
+  })
+  const { toast } = useToast()
 
   useEffect(() => {
     // Check authentication
@@ -43,122 +65,167 @@ export default function AssignerPhonesPage() {
       return
     }
 
-    loadPhones()
-  }, [])
+    fetchPhones()
+  }, [pagination.page, pagination.limit, statusFilter, searchTerm])
 
-  useEffect(() => {
-    filterPhones()
-  }, [phones, searchTerm, statusFilter])
+  const fetchPhones = async () => {
+    setLoading(true)
+    setError(null)
+    try {
+      const token = localStorage.getItem("jwt_token")
+      
+      if (!token) {
+        setError("Token d'authentification manquant")
+        return
+      }
 
-  const loadPhones = () => {
-    const mockPhones: PhoneDevice[] = [
-      {
-        id: "1",
-        model: "iPhone 15 Pro",
-        brand: "Apple",
-        imei: "123456789012345",
-        serialNumber: "F2LW8J9K2L",
-        status: "assigned",
-        assignedTo: "Jean Dupont",
-        purchaseDate: "2023-10-15",
-        warrantyExpiry: "2025-10-15",
-        condition: "excellent",
-        storage: "256GB",
-        color: "Titane Naturel",
-        price: 1229,
-      },
-      {
-        id: "2",
-        model: "Galaxy S24",
-        brand: "Samsung",
-        imei: "987654321098765",
-        serialNumber: "R58N123456",
-        status: "assigned",
-        assignedTo: "Marie Martin",
-        purchaseDate: "2024-02-01",
-        warrantyExpiry: "2026-02-01",
-        condition: "excellent",
-        storage: "512GB",
-        color: "Violet",
-        price: 899,
-      },
-      {
-        id: "3",
-        model: "Pixel 8",
-        brand: "Google",
-        imei: "456789123456789",
-        serialNumber: "GA02345678",
-        status: "available",
-        purchaseDate: "2023-12-10",
-        warrantyExpiry: "2025-12-10",
-        condition: "good",
-        storage: "128GB",
-        color: "Obsidienne",
-        price: 699,
-      },
-      {
-        id: "4",
-        model: "iPhone 14",
-        brand: "Apple",
-        imei: "789123456789123",
-        serialNumber: "F2LW8J9K3M",
-        status: "maintenance",
-        purchaseDate: "2022-09-20",
-        warrantyExpiry: "2024-09-20",
-        condition: "fair",
-        storage: "128GB",
-        color: "Bleu",
-        price: 909,
-      },
-      {
-        id: "5",
-        model: "iPhone 13",
-        brand: "Apple",
-        imei: "111222333444555",
-        serialNumber: "F2LW8J9K4N",
-        status: "available",
-        purchaseDate: "2021-09-24",
-        warrantyExpiry: "2023-09-24",
-        condition: "good",
-        storage: "128GB",
-        color: "Rose",
-        price: 809,
-      },
-      {
-        id: "6",
-        model: "Galaxy S23",
-        brand: "Samsung",
-        imei: "666777888999000",
-        serialNumber: "R58N654321",
-        status: "available",
-        purchaseDate: "2023-02-17",
-        warrantyExpiry: "2025-02-17",
-        condition: "excellent",
-        storage: "256GB",
-        color: "Crème",
-        price: 799,
-      },
-    ]
-    setPhones(mockPhones)
+      const api = new PhoneManagementApi(getApiConfig(token))
+      
+      // Convert status filter to API format
+      let statusParam: "AVAILABLE" | "ASSIGNED" | "LOST" | "DAMAGED" | undefined
+      if (statusFilter !== "all") {
+        // Map frontend filter values to backend API values
+        const statusMapping: { [key: string]: "AVAILABLE" | "ASSIGNED" | "LOST" | "DAMAGED" } = {
+          "available": "AVAILABLE",
+          "assigned": "ASSIGNED", 
+          "lost": "LOST",
+          "damaged": "DAMAGED"
+        }
+        statusParam = statusMapping[statusFilter]
+      }
+
+      console.log("Making API request with params:", {
+        page: pagination.page,
+        limit: pagination.limit,
+        status: statusParam,
+        brand: undefined,
+        model: searchTerm || undefined
+      })
+
+      const res = await api.getPhones(
+        pagination.page,
+        pagination.limit,
+        statusParam,
+        undefined, // brand
+        searchTerm || undefined // model
+      )
+
+      console.log("API Response:", res)
+
+      // Extract data from response
+      let apiPhones: any[] = []
+      let paginationData: any = {}
+
+      if (res.data && typeof res.data === 'object') {
+        const responseData = res.data as any
+        if (responseData.success && responseData.data) {
+          apiPhones = (responseData.data.phones as any[]) || []
+          paginationData = responseData.data.pagination || {}
+        } else if (Array.isArray(responseData)) {
+          apiPhones = responseData
+        } else if (responseData.phones) {
+          apiPhones = (responseData.phones as any[]) || []
+          paginationData = responseData.pagination || {}
+        }
+      }
+
+             console.log("Processed phones:", apiPhones)
+       console.log("Pagination data:", paginationData)
+       
+       // Debug condition values
+       apiPhones.forEach((phone: any, index: number) => {
+         console.log(`Phone ${index + 1} condition:`, phone.condition)
+       })
+
+             // Transform API data to match our interface
+       const transformedPhones: PhoneDevice[] = apiPhones.map((phone: any) => ({
+         id: phone.id?.toString() || "",
+         model: phone.model || "",
+         brand: phone.brand || "",
+         imei: phone.imei || "",
+         serialNumber: phone.imei || "", // Using IMEI as serial number for now
+         status: mapStatusToFrontend(phone.status),
+         assignedTo: phone.assignedToName || undefined,
+         assignedDate: phone.assignedDate || undefined,
+         purchaseDate: phone.purchaseDate || "2024-01-01", // Default date if not provided
+         warrantyExpiry: phone.warrantyExpiry || "2026-01-01", // Default warranty date
+         condition: mapConditionToFrontend(phone.condition),
+         storage: phone.storage || "128GB",
+         color: phone.color || "Standard",
+         price: phone.price || 0,
+         notes: phone.notes || undefined,
+       }))
+
+      setPhones(transformedPhones)
+      setFilteredPhones(transformedPhones)
+
+      // Update pagination info
+      if (paginationData.total !== undefined) {
+        setPagination(prev => ({
+          ...prev,
+          total: paginationData.total,
+          totalPages: paginationData.totalPages || Math.ceil(paginationData.total / prev.limit),
+        }))
+      }
+
+    } catch (error: any) {
+      console.error("Error fetching phones:", error)
+      
+      let errorMessage = "Erreur lors du chargement des téléphones"
+      if (error.response?.status === 403) {
+        errorMessage = "Accès refusé. Vérifiez vos permissions d'accès."
+      } else if (error.response?.data?.message) {
+        errorMessage = error.response.data.message
+      }
+      
+      setError(errorMessage)
+      toast({
+        title: "Erreur",
+        description: errorMessage,
+        variant: "destructive",
+      })
+    } finally {
+      setLoading(false)
+    }
   }
 
-  const filterPhones = () => {
-    let filtered = phones
-
-    if (searchTerm) {
-      filtered = filtered.filter(
-        (phone) =>
-          phone.model.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          phone.brand.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          phone.assignedTo?.toLowerCase().includes(searchTerm.toLowerCase()),
-      )
+  const mapStatusToFrontend = (apiStatus: string): "available" | "assigned" | "lost" | "damaged" => {
+    switch (apiStatus) {
+      case "AVAILABLE":
+        return "available"
+      case "ASSIGNED":
+        return "assigned"
+      case "LOST":
+        return "lost"
+      case "DAMAGED":
+        return "damaged"
+      default:
+        return "available"
     }
+  }
 
-    if (statusFilter !== "all") {
-      filtered = filtered.filter((phone) => phone.status === statusFilter)
+  const mapConditionToFrontend = (apiCondition: string): "excellent" | "good" | "fair" | "poor" => {
+    if (!apiCondition) return "excellent"
+    
+    const condition = apiCondition.toLowerCase()
+    switch (condition) {
+      case "excellent":
+      case "excellent":
+        return "excellent"
+      case "good":
+      case "bon":
+        return "good"
+      case "fair":
+      case "moyen":
+      case "acceptable":
+        return "fair"
+      case "poor":
+      case "mauvais":
+      case "bad":
+        return "poor"
+      default:
+        return "excellent"
     }
-
-    setFilteredPhones(filtered)
   }
 
   const handleLogout = () => {
@@ -182,20 +249,31 @@ export default function AssignerPhonesPage() {
     const colors = {
       available: "bg-green-100 text-green-800",
       assigned: "bg-blue-100 text-blue-800",
-      maintenance: "bg-orange-100 text-orange-800",
-      retired: "bg-red-100 text-red-800",
+      lost: "bg-orange-100 text-orange-800",
+      damaged: "bg-red-100 text-red-800",
     }
     return colors[status as keyof typeof colors] || "bg-gray-100 text-gray-800"
   }
 
   const getConditionColor = (condition: string) => {
+    console.log("Getting color for condition:", condition)
     const colors = {
-      excellent: "bg-green-100 text-green-800",
-      good: "bg-blue-100 text-blue-800",
-      fair: "bg-yellow-100 text-yellow-800",
-      poor: "bg-red-100 text-red-800",
+      excellent: "bg-green-100 text-green-800 border border-green-300",
+      good: "bg-blue-100 text-blue-800 border border-blue-300",
+      fair: "bg-yellow-100 text-yellow-800 border border-yellow-300",
+      poor: "bg-red-100 text-red-800 border border-red-300",
     }
-    return colors[condition as keyof typeof colors] || "bg-gray-100 text-gray-800"
+    const colorClass = colors[condition as keyof typeof colors] || "bg-gray-100 text-gray-800 border border-gray-300"
+    console.log("Color class:", colorClass)
+    return colorClass
+  }
+
+  const handlePageChange = (newPage: number) => {
+    setPagination(prev => ({ ...prev, page: newPage }))
+  }
+
+  const handleLimitChange = (newLimit: number) => {
+    setPagination(prev => ({ ...prev, page: 1, limit: newLimit }))
   }
 
   return (
@@ -257,7 +335,9 @@ export default function AssignerPhonesPage() {
             <Card className="bg-white/90 backdrop-blur-xl border-0 shadow-xl">
               <CardHeader>
                 <div className="flex items-center justify-between">
-                  <CardTitle className="text-xl font-bold">Parc de Téléphones</CardTitle>
+                  <CardTitle className="text-xl font-bold">
+                    Parc de Téléphones ({pagination.total})
+                  </CardTitle>
                   <div className="flex items-center space-x-4">
                     <select
                       className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
@@ -267,8 +347,8 @@ export default function AssignerPhonesPage() {
                       <option value="all">Tous les statuts</option>
                       <option value="available">Disponible</option>
                       <option value="assigned">Assigné</option>
-                      <option value="maintenance">Maintenance</option>
-                      <option value="retired">Retiré</option>
+                      <option value="lost">Perdu</option>
+                      <option value="damaged">Endommagé</option>
                     </select>
                     <div className="text-sm text-gray-500 bg-blue-50 px-3 py-2 rounded-lg">
                       <Eye className="h-4 w-4 inline mr-2" />
@@ -278,48 +358,98 @@ export default function AssignerPhonesPage() {
                 </div>
               </CardHeader>
               <CardContent>
-                <DataTable
-                  data={filteredPhones}
-                  columns={phoneColumns}
-                  renderCell={(phone, key) => {
-                    if (key === "model") {
-                      return (
-                        <div className="flex items-center space-x-3">
-                          <div className="w-10 h-10 bg-gradient-to-r from-blue-500 to-purple-600 rounded-lg flex items-center justify-center">
-                            <Phone className="h-5 w-5 text-white" />
-                          </div>
-                          <div>
-                            <p className="font-medium text-gray-900">{phone.model}</p>
-                            <p className="text-sm text-gray-500">{phone.serialNumber}</p>
-                          </div>
+                {loading ? (
+                  <div className="text-center py-12">
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
+                    <p className="text-gray-500 mt-4">Chargement des téléphones...</p>
+                  </div>
+                ) : error ? (
+                  <div className="text-center py-12">
+                    <p className="text-red-500 text-lg">{error}</p>
+                    <Button onClick={fetchPhones} className="mt-4">
+                      Réessayer
+                    </Button>
+                  </div>
+                ) : (
+                  <>
+                    <DataTable
+                      data={filteredPhones}
+                      columns={phoneColumns}
+                      renderCell={(phone, key) => {
+                        if (key === "model") {
+                          return (
+                            <div className="flex items-center space-x-3">
+                              <div className="w-10 h-10 bg-gradient-to-r from-blue-500 to-purple-600 rounded-lg flex items-center justify-center">
+                                <Phone className="h-5 w-5 text-white" />
+                              </div>
+                              <div>
+                                <p className="font-medium text-gray-900">{phone.model}</p>
+                                <p className="text-sm text-gray-500">{phone.serialNumber}</p>
+                              </div>
+                            </div>
+                          )
+                        }
+                        if (key === "status") {
+                          return <Badge className={getStatusColor(phone.status)}>{phone.status}</Badge>
+                        }
+                        if (key === "condition") {
+                          return <Badge className={getConditionColor(phone.condition)}>{phone.condition}</Badge>
+                        }
+                        if (key === "assignedTo") {
+                          return phone.assignedTo ? (
+                            <div className="flex items-center space-x-2">
+                              <User className="h-4 w-4 text-blue-500" />
+                              <span>{phone.assignedTo}</span>
+                            </div>
+                          ) : (
+                            <span className="text-gray-400">Non assigné</span>
+                          )
+                        }
+                        if (key === "price") {
+                          return <span>{phone.price.toLocaleString()} MAD</span>
+                        }
+                        if (key === "purchaseDate") {
+                          return new Date(phone.purchaseDate).toLocaleDateString("fr-FR")
+                        }
+                        return phone[key as keyof PhoneDevice] || "-"
+                      }}
+                    />
+
+                    {/* Pagination */}
+                    {pagination.totalPages > 1 && (
+                      <div className="flex items-center justify-between mt-6">
+                        <div className="text-sm text-gray-600">
+                          Affichage de {((pagination.page - 1) * pagination.limit) + 1} à{" "}
+                          {Math.min(pagination.page * pagination.limit, pagination.total)} sur {pagination.total}{" "}
+                          résultats
                         </div>
-                      )
-                    }
-                    if (key === "status") {
-                      return <Badge className={getStatusColor(phone.status)}>{phone.status}</Badge>
-                    }
-                    if (key === "condition") {
-                      return <Badge className={getConditionColor(phone.condition)}>{phone.condition}</Badge>
-                    }
-                    if (key === "assignedTo") {
-                      return phone.assignedTo ? (
                         <div className="flex items-center space-x-2">
-                          <User className="h-4 w-4 text-blue-500" />
-                          <span>{phone.assignedTo}</span>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handlePageChange(pagination.page - 1)}
+                            disabled={pagination.page === 1}
+                          >
+                            <ChevronLeft className="h-4 w-4" />
+                            Précédent
+                          </Button>
+                          <span className="text-sm text-gray-600">
+                            Page {pagination.page} sur {pagination.totalPages}
+                          </span>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handlePageChange(pagination.page + 1)}
+                            disabled={pagination.page === pagination.totalPages}
+                          >
+                            Suivant
+                            <ChevronRight className="h-4 w-4" />
+                          </Button>
                         </div>
-                      ) : (
-                        <span className="text-gray-400">Non assigné</span>
-                      )
-                    }
-                    if (key === "price") {
-                      return <span>€{phone.price}</span>
-                    }
-                    if (key === "purchaseDate") {
-                      return new Date(phone.purchaseDate).toLocaleDateString("fr-FR")
-                    }
-                    return phone[key as keyof PhoneDevice] || "-"
-                  }}
-                />
+                      </div>
+                    )}
+                  </>
+                )}
               </CardContent>
             </Card>
           </div>
