@@ -87,13 +87,42 @@ export function AttributionModal({ isOpen, onClose, onSave, attribution }: Attri
         const userApi = new UserManagementApi(getApiConfig(token));
         const phoneApi = new PhoneManagementApi(getApiConfig(token));
         const simApi = new SIMCardManagementApi(getApiConfig(token));
-        const usersRes = await userApi.getUsers();
+        
+        // Fetch all users with pagination to get complete list
+        const usersRes = await userApi.getUsers(
+          1,        // page
+          1000,     // limit - high number to get all users
+          undefined, // search
+          undefined, // department
+          undefined, // status
+          undefined  // role
+        );
+        
+        console.log("Attribution Modal - Users API Response:", usersRes);
+        
         const phonesRes = await phoneApi.getPhones();
         const simsRes = await simApi.getSimCards();
-        setUsers((usersRes.data.data as any)?.users || []);
+        
+        const responseData = usersRes.data as any;
+        let apiUsers: any[] = [];
+        
+        // Handle different response structures
+        if (responseData.success && responseData.data) {
+          apiUsers = (responseData.data.users as any[]) || [];
+        } else if (responseData.users) {
+          apiUsers = (responseData.users as any[]) || [];
+        } else if (Array.isArray(responseData)) {
+          apiUsers = responseData;
+        }
+        
+        console.log("Attribution Modal - Extracted users:", apiUsers);
+        console.log("Attribution Modal - Total users loaded:", apiUsers.length);
+        
+        setUsers(apiUsers);
         setPhones((phonesRes.data.data as any)?.phones || []);
         setSimCards((simsRes.data.data as any)?.simcards || []);
       } catch (err) {
+        console.error("Attribution Modal - Error fetching data:", err);
         setUsers([]); setPhones([]); setSimCards([]);
       }
     };
@@ -110,12 +139,19 @@ export function AttributionModal({ isOpen, onClose, onSave, attribution }: Attri
   }
 
   // Enhanced user filtering with better search
-  const filteredUsers = users.filter(
-    (user) =>
-      user.name?.toLowerCase().includes(userSearch.toLowerCase()) ||
-      user.email?.toLowerCase().includes(userSearch.toLowerCase()) ||
-      user.department?.toLowerCase().includes(userSearch.toLowerCase())
-  );
+  const filteredUsers = users.filter((user) => {
+    const searchLower = userSearch.toLowerCase();
+    const nameMatch = user.name?.toLowerCase().includes(searchLower);
+    const emailMatch = user.email?.toLowerCase().includes(searchLower);
+    const deptMatch = user.department?.toLowerCase().includes(searchLower);
+    
+    // Debug logging for search
+    if (userSearch.trim()) {
+      console.log(`Attribution Modal - User ${user.name}: name=${nameMatch}, email=${emailMatch}, dept=${deptMatch}`);
+    }
+    
+    return nameMatch || emailMatch || deptMatch;
+  });
 
   const handleUserSelect = (userId: string) => {
     const selectedUser = users.find((u) => u.id === userId)
