@@ -24,8 +24,14 @@ import {
   CreditCard,
   User,
   Calendar,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react"
 import { useRouter } from "next/navigation"
+import { AttributionManagementApi } from "@/api/generated/apis/attribution-management-api"
+import { getApiConfig } from "@/lib/apiClient"
+import { AttributionDto } from "@/api/generated/models"
+import axios from "axios"
 
 interface Attribution {
   id: string
@@ -43,6 +49,13 @@ interface Attribution {
   notes?: string
 }
 
+interface PaginationInfo {
+  page: number
+  limit: number
+  total: number
+  totalPages: number
+}
+
 export default function AssignerAttributionsPage() {
   const [attributions, setAttributions] = useState<Attribution[]>([])
   const [filteredAttributions, setFilteredAttributions] = useState<Attribution[]>([])
@@ -50,6 +63,14 @@ export default function AssignerAttributionsPage() {
   const [statusFilter, setStatusFilter] = useState("all")
   const [showModal, setShowModal] = useState(false)
   const [editingAttribution, setEditingAttribution] = useState<Attribution | null>(null)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [pagination, setPagination] = useState<PaginationInfo>({
+    page: 1,
+    limit: 10,
+    total: 0,
+    totalPages: 0,
+  })
   const { toast } = useToast()
   const router = useRouter()
 
@@ -60,106 +81,99 @@ export default function AssignerAttributionsPage() {
       router.push("/")
       return
     }
-    loadAttributions()
-  }, [router])
+    fetchAttributions()
+  }, [router, pagination.page, pagination.limit, statusFilter, searchTerm])
 
-  useEffect(() => {
-    filterAttributions()
-  }, [attributions, searchTerm, statusFilter])
+  const fetchAttributions = async () => {
+    setLoading(true)
+    setError(null)
+    try {
+      const token = localStorage.getItem("jwt_token")
+      
+      if (!token) {
+        setError("Token d'authentification manquant")
+        return
+      }
 
-  const loadAttributions = () => {
-    const mockAttributions: Attribution[] = [
-      {
-        id: "1",
-        userId: "user1",
-        userName: "Marie Dubois",
-        userEmail: "marie.dubois@company.com",
-        phoneId: "phone1",
-        phoneModel: "iPhone 13 Pro",
-        simCardId: "sim1",
-        simCardNumber: "+33 6 12 34 56 78",
-        assignedBy: "Randy Riley",
-        assignmentDate: "2024-01-10",
-        status: "ACTIVE",
-        notes: "Attribution complète avec téléphone et SIM",
-      },
-      {
-        id: "2",
-        userId: "user2",
-        userName: "Pierre Martin",
-        userEmail: "pierre.martin@company.com",
-        phoneId: "phone2",
-        phoneModel: "Samsung Galaxy S23",
-        simCardId: "sim2",
-        simCardNumber: "+33 6 98 76 54 32",
-        assignedBy: "Randy Riley",
-        assignmentDate: "2024-01-12",
-        status: "PENDING",
-        notes: "Attribution pour nouveau poste",
-      },
-      {
-        id: "3",
-        userId: "user3",
-        userName: "Sophie Laurent",
-        userEmail: "sophie.laurent@company.com",
-        phoneId: "phone3",
-        phoneModel: "iPhone 12",
-        simCardId: "sim3",
-        simCardNumber: "+33 6 11 22 33 44",
-        assignedBy: "Randy Riley",
-        assignmentDate: "2024-01-05",
-        returnDate: "2024-01-14",
-        status: "RETURNED",
-        notes: "Retour pour changement de poste",
-      },
-      {
-        id: "4",
-        userId: "user4",
-        userName: "Thomas Durand",
-        userEmail: "thomas.durand@company.com",
-        phoneId: "phone4",
-        phoneModel: "Pixel 8",
-        simCardId: "sim4",
-        simCardNumber: "+33 6 55 66 77 88",
-        assignedBy: "Randy Riley",
-        assignmentDate: "2024-02-01",
-        status: "ACTIVE",
-        notes: "Attribution standard",
-      },
-      {
-        id: "5",
-        userId: "user5",
-        userName: "Julie Moreau",
-        userEmail: "julie.moreau@company.com",
-        simCardId: "sim5",
-        simCardNumber: "+33 6 99 88 77 66",
-        assignedBy: "Randy Riley",
-        assignmentDate: "2024-02-05",
-        status: "PENDING",
-        notes: "Attribution SIM uniquement",
-      },
-    ]
-    setAttributions(mockAttributions)
-  }
+      const api = new AttributionManagementApi(getApiConfig(token))
+      
+      // Convert status filter to API format
+      let statusParam: "ACTIVE" | "PENDING" | "RETURNED" | undefined
+      if (statusFilter !== "all") {
+        statusParam = statusFilter.toUpperCase() as "ACTIVE" | "PENDING" | "RETURNED"
+      }
 
-  const filterAttributions = () => {
-    let filtered = attributions
-
-    if (searchTerm) {
-      filtered = filtered.filter(
-        (attribution) =>
-          attribution.userName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          attribution.userEmail.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          attribution.phoneModel?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          attribution.simCardNumber?.toLowerCase().includes(searchTerm.toLowerCase()),
+      const res = await api.getAttributions(
+        pagination.page,
+        pagination.limit,
+        statusParam,
+        undefined, // userId
+        undefined, // assignedBy
+        searchTerm || undefined
       )
-    }
 
-    if (statusFilter !== "all") {
-      filtered = filtered.filter((attribution) => attribution.status === statusFilter)
-    }
+      console.log("API Response:", res)
 
-    setFilteredAttributions(filtered)
+      // Extract data from response
+      let apiAttributions: any[] = []
+      let paginationData: any = {}
+
+      if (res.data && typeof res.data === 'object') {
+        const responseData = res.data as any
+        if (responseData.success && responseData.data) {
+          apiAttributions = (responseData.data.attributions as any[]) || []
+          paginationData = responseData.data.pagination || {}
+        } else if (Array.isArray(responseData)) {
+          apiAttributions = responseData
+        } else if (responseData.attributions) {
+          apiAttributions = (responseData.attributions as any[]) || []
+          paginationData = responseData.pagination || {}
+        }
+      }
+
+      console.log("Processed attributions:", apiAttributions)
+      console.log("Pagination data:", paginationData)
+
+      // Transform API data to match our interface
+      const transformedAttributions: Attribution[] = apiAttributions.map((attr: any) => ({
+        id: attr.id?.toString() || "",
+        userId: attr.userId?.toString() || "",
+        userName: attr.userName || "",
+        userEmail: attr.userEmail || "",
+        phoneId: attr.phoneId?.toString(),
+        phoneModel: attr.phoneModel || "",
+        simCardId: attr.simCardId?.toString(),
+        simCardNumber: attr.simCardNumber || "",
+        assignedBy: attr.assignedByName || attr.assignedBy || "",
+        assignmentDate: attr.assignmentDate || "",
+        returnDate: attr.returnDate,
+        status: attr.status || "PENDING",
+        notes: attr.notes || "",
+      }))
+
+      setAttributions(transformedAttributions)
+      setFilteredAttributions(transformedAttributions)
+
+      // Update pagination info
+      if (paginationData.total !== undefined) {
+        setPagination(prev => ({
+          ...prev,
+          total: paginationData.total,
+          totalPages: paginationData.totalPages || Math.ceil(paginationData.total / prev.limit),
+        }))
+      }
+
+    } catch (error: any) {
+      console.error("Error fetching attributions:", error)
+      setError(error.response?.data?.message || "Erreur lors du chargement des attributions")
+      toast({
+        title: "Erreur",
+        description: "Impossible de charger les attributions",
+        variant: "destructive",
+      })
+    } finally {
+      setLoading(false)
+    }
   }
 
   const handleLogout = () => {
@@ -176,26 +190,115 @@ export default function AssignerAttributionsPage() {
     })
   }
 
-  const handleDelete = (id: string) => {
-    setAttributions(attributions.filter((attr) => attr.id !== id))
-    toast({
-      title: "Attribution supprimée",
-      description: "L'attribution a été supprimée avec succès",
-    })
+  const handleDelete = async (id: string) => {
+    try {
+      const token = localStorage.getItem("jwt_token")
+      if (!token) {
+        toast({
+          title: "Erreur",
+          description: "Token d'authentification manquant",
+          variant: "destructive",
+        })
+        return
+      }
+
+      const api = new AttributionManagementApi(getApiConfig(token))
+      await api.deleteAttribution(parseInt(id))
+      
+      setAttributions(attributions.filter((attr) => attr.id !== id))
+      toast({
+        title: "Attribution supprimée",
+        description: "L'attribution a été supprimée avec succès",
+      })
+    } catch (error: any) {
+      console.error("Error deleting attribution:", error)
+      toast({
+        title: "Erreur",
+        description: "Impossible de supprimer l'attribution",
+        variant: "destructive",
+      })
+    }
   }
 
-  const handleReturn = (id: string) => {
-    setAttributions(
-      attributions.map((attr) =>
-        attr.id === id
-          ? { ...attr, status: "RETURNED" as const, returnDate: new Date().toISOString().split("T")[0] }
-          : attr,
-      ),
-    )
-    toast({
-      title: "Attribution retournée",
-      description: "L'attribution a été marquée comme retournée",
-    })
+  const handleReturn = async (id: string) => {
+    try {
+      const token = localStorage.getItem("jwt_token")
+      if (!token) {
+        toast({
+          title: "Erreur",
+          description: "Token d'authentification manquant",
+          variant: "destructive",
+        })
+        return
+      }
+
+      // Find the attribution to get user details for confirmation
+      const attribution = attributions.find(attr => attr.id === id)
+      if (!attribution) {
+        toast({
+          title: "Erreur",
+          description: "Attribution introuvable",
+          variant: "destructive",
+        })
+        return
+      }
+
+      // Show confirmation dialog
+      const confirmed = window.confirm(
+        `Êtes-vous sûr de vouloir retourner l'attribution pour ${attribution.userName} ?\n\n` +
+        `Cette action va :\n` +
+        `• Marquer l'attribution comme retournée\n` +
+        `• Libérer le téléphone et/ou la carte SIM\n` +
+        `• Enregistrer la date de retour`
+      )
+
+      if (!confirmed) {
+        return
+      }
+
+      const api = new AttributionManagementApi(getApiConfig(token))
+      
+      // Optional: Add return notes
+      const returnNotes = prompt("Notes de retour (optionnel):", "")
+      
+      // Use axios directly to send request body since the generated API doesn't support it
+      const response = await axios.post(
+        `http://localhost:8080/api/attributions/${id}/return`,
+        returnNotes ? { notes: returnNotes } : {},
+        {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        }
+      )
+      
+      // Refresh the data
+      fetchAttributions()
+      
+      toast({
+        title: "Attribution retournée",
+        description: `L'attribution pour ${attribution.userName} a été marquée comme retournée avec succès.`,
+      })
+    } catch (error: any) {
+      console.error("Error returning attribution:", error)
+      
+      // Handle specific error cases
+      let errorMessage = "Impossible de retourner l'attribution"
+      if (error.response?.data?.error?.message) {
+        errorMessage = error.response.data.error.message
+      } else if (error.response?.status === 404) {
+        errorMessage = "Attribution introuvable"
+      } else if (error.response?.status === 400) {
+        errorMessage = "L'attribution n'est pas active et ne peut pas être retournée"
+      }
+      
+      toast({
+        title: "Erreur",
+        description: errorMessage,
+        variant: "destructive",
+      })
+    }
   }
 
   const handleView = (attribution: Attribution) => {
@@ -205,35 +308,62 @@ export default function AssignerAttributionsPage() {
     })
   }
 
-  const handleSaveAttribution = (attributionData: Partial<Attribution>) => {
-    if (editingAttribution) {
-      // Edit existing attribution
-      setAttributions(
-        attributions.map((attribution) =>
-          attribution.id === editingAttribution.id ? { ...attribution, ...attributionData } : attribution,
-        ),
-      )
+  const handleSaveAttribution = async (attributionData: Partial<Attribution>) => {
+    try {
+      const token = localStorage.getItem("jwt_token")
+      if (!token) {
+        toast({
+          title: "Erreur",
+          description: "Token d'authentification manquant",
+          variant: "destructive",
+        })
+        return
+      }
+
+      const api = new AttributionManagementApi(getApiConfig(token))
+
+      if (editingAttribution) {
+        // Edit existing attribution
+        const updateData: AttributionDto = {
+          userId: parseInt(attributionData.userId || "0"),
+          phoneId: attributionData.phoneId ? parseInt(attributionData.phoneId) : undefined,
+          simCardId: attributionData.simCardId ? parseInt(attributionData.simCardId) : undefined,
+          notes: attributionData.notes,
+        }
+        
+        await api.updateAttribution(parseInt(editingAttribution.id), updateData)
+        toast({
+          title: "Attribution modifiée",
+          description: "L'attribution a été mise à jour avec succès.",
+        })
+      } else {
+        // Add new attribution
+        const createData: AttributionDto = {
+          userId: parseInt(attributionData.userId || "0"),
+          phoneId: attributionData.phoneId ? parseInt(attributionData.phoneId) : undefined,
+          simCardId: attributionData.simCardId ? parseInt(attributionData.simCardId) : undefined,
+          notes: attributionData.notes,
+        }
+        
+        await api.createAttribution(createData)
+        toast({
+          title: "Attribution créée",
+          description: "La nouvelle attribution a été créée avec succès.",
+        })
+      }
+      
+      // Refresh the data
+      fetchAttributions()
+      setShowModal(false)
+      setEditingAttribution(null)
+    } catch (error: any) {
+      console.error("Error saving attribution:", error)
       toast({
-        title: "Attribution modifiée",
-        description: "L'attribution a été mise à jour avec succès.",
-      })
-    } else {
-      // Add new attribution
-      const newAttribution: Attribution = {
-        id: Date.now().toString(),
-        ...attributionData,
-        assignedBy: "Randy Riley",
-        assignmentDate: new Date().toISOString().split("T")[0],
-        status: "ACTIVE",
-      } as Attribution
-      setAttributions([...attributions, newAttribution])
-      toast({
-        title: "Attribution créée",
-        description: "La nouvelle attribution a été créée avec succès.",
+        title: "Erreur",
+        description: "Impossible de sauvegarder l'attribution",
+        variant: "destructive",
       })
     }
-    setShowModal(false)
-    setEditingAttribution(null)
   }
 
   const getStatusBadge = (status: string) => {
@@ -247,6 +377,14 @@ export default function AssignerAttributionsPage() {
       default:
         return <Badge variant="secondary">{status}</Badge>
     }
+  }
+
+  const handlePageChange = (newPage: number) => {
+    setPagination(prev => ({ ...prev, page: newPage }))
+  }
+
+  const handleLimitChange = (newLimit: number) => {
+    setPagination(prev => ({ ...prev, page: 1, limit: newLimit }))
   }
 
   return (
@@ -298,11 +436,23 @@ export default function AssignerAttributionsPage() {
           <Card className="bg-white/90 backdrop-blur-xl border-0 shadow-xl">
             <CardHeader>
               <CardTitle className="text-xl font-bold">
-                Liste des Attributions ({filteredAttributions.length})
+                Liste des Attributions ({pagination.total})
               </CardTitle>
             </CardHeader>
             <CardContent>
-              {filteredAttributions.length === 0 ? (
+              {loading ? (
+                <div className="text-center py-12">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
+                  <p className="text-gray-500 mt-4">Chargement des attributions...</p>
+                </div>
+              ) : error ? (
+                <div className="text-center py-12">
+                  <p className="text-red-500 text-lg">{error}</p>
+                  <Button onClick={fetchAttributions} className="mt-4">
+                    Réessayer
+                  </Button>
+                </div>
+              ) : filteredAttributions.length === 0 ? (
                 <div className="text-center py-12">
                   <Phone className="h-16 w-16 text-gray-400 mx-auto mb-4" />
                   <p className="text-gray-500 text-lg">Aucune attribution trouvée</p>
@@ -313,121 +463,157 @@ export default function AssignerAttributionsPage() {
                   </p>
                 </div>
               ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full">
-                    <thead className="bg-gray-50">
-                      <tr>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Utilisateur
-                        </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Téléphone
-                        </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Carte SIM
-                        </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Date d'attribution
-                        </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Statut
-                        </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Assigné par
-                        </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Actions
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody className="bg-white divide-y divide-gray-200">
-                      {filteredAttributions.map((attribution) => (
-                        <tr key={attribution.id} className="hover:bg-gray-50 transition-colors">
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <div className="flex items-center space-x-3">
-                              <Avatar className="h-8 w-8">
-                                <AvatarFallback className="bg-gradient-to-r from-blue-500 to-purple-600 text-white text-xs">
-                                  {attribution.userName
-                                    .split(" ")
-                                    .map((n) => n[0])
-                                    .join("")}
-                                </AvatarFallback>
-                              </Avatar>
-                              <div>
-                                <p className="font-medium text-gray-900">{attribution.userName}</p>
-                                <p className="text-sm text-gray-500">{attribution.userEmail}</p>
-                              </div>
-                            </div>
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            {attribution.phoneModel ? (
-                              <div className="flex items-center space-x-2">
-                                <Phone className="h-4 w-4 text-blue-500" />
-                                <span className="text-sm text-gray-900">{attribution.phoneModel}</span>
-                              </div>
-                            ) : (
-                              <span className="text-gray-400 text-sm">Non assigné</span>
-                            )}
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            {attribution.simCardNumber ? (
-                              <div className="flex items-center space-x-2">
-                                <CreditCard className="h-4 w-4 text-green-500" />
-                                <span className="font-mono text-sm text-gray-900">{attribution.simCardNumber}</span>
-                              </div>
-                            ) : (
-                              <span className="text-gray-400 text-sm">Non assignée</span>
-                            )}
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <div className="flex items-center space-x-2">
-                              <Calendar className="h-4 w-4 text-gray-400" />
-                              <span className="text-sm text-gray-900">
-                                {new Date(attribution.assignmentDate).toLocaleDateString("fr-FR")}
-                              </span>
-                            </div>
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap">{getStatusBadge(attribution.status)}</td>
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <div className="flex items-center space-x-2">
-                              <User className="h-4 w-4 text-gray-400" />
-                              <span className="text-sm text-gray-900">{attribution.assignedBy}</span>
-                            </div>
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <DropdownMenu>
-                              <DropdownMenuTrigger asChild>
-                                <Button variant="ghost" className="h-8 w-8 p-0">
-                                  <MoreHorizontal className="h-4 w-4" />
-                                </Button>
-                              </DropdownMenuTrigger>
-                              <DropdownMenuContent align="end">
-                                <DropdownMenuItem onClick={() => handleView(attribution)}>
-                                  <Eye className="mr-2 h-4 w-4" />
-                                  Voir détails
-                                </DropdownMenuItem>
-                                <DropdownMenuItem onClick={() => handleEdit(attribution)}>
-                                  <Edit className="mr-2 h-4 w-4" />
-                                  Modifier
-                                </DropdownMenuItem>
-                                {attribution.status === "ACTIVE" && (
-                                  <DropdownMenuItem onClick={() => handleReturn(attribution.id)}>
-                                    <RotateCcw className="mr-2 h-4 w-4" />
-                                    Retourner
-                                  </DropdownMenuItem>
-                                )}
-                                <DropdownMenuItem onClick={() => handleDelete(attribution.id)} className="text-red-600">
-                                  <Trash2 className="mr-2 h-4 w-4" />
-                                  Supprimer
-                                </DropdownMenuItem>
-                              </DropdownMenuContent>
-                            </DropdownMenu>
-                          </td>
+                <>
+                  <div className="overflow-x-auto">
+                    <table className="w-full">
+                      <thead className="bg-gray-50">
+                        <tr>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Utilisateur
+                          </th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Téléphone
+                          </th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Carte SIM
+                          </th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Date d'attribution
+                          </th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Statut
+                          </th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Assigné par
+                          </th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Actions
+                          </th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                      </thead>
+                      <tbody className="bg-white divide-y divide-gray-200">
+                        {filteredAttributions.map((attribution) => (
+                          <tr key={attribution.id} className="hover:bg-gray-50 transition-colors">
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <div className="flex items-center space-x-3">
+                                <Avatar className="h-8 w-8">
+                                  <AvatarFallback className="bg-gradient-to-r from-blue-500 to-purple-600 text-white text-xs">
+                                    {attribution.userName
+                                      .split(" ")
+                                      .map((n) => n[0])
+                                      .join("")}
+                                  </AvatarFallback>
+                                </Avatar>
+                                <div>
+                                  <p className="font-medium text-gray-900">{attribution.userName}</p>
+                                  <p className="text-sm text-gray-500">{attribution.userEmail}</p>
+                                </div>
+                              </div>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              {attribution.phoneModel ? (
+                                <div className="flex items-center space-x-2">
+                                  <Phone className="h-4 w-4 text-blue-500" />
+                                  <span className="text-sm text-gray-900">{attribution.phoneModel}</span>
+                                </div>
+                              ) : (
+                                <span className="text-gray-400 text-sm">Non assigné</span>
+                              )}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              {attribution.simCardNumber ? (
+                                <div className="flex items-center space-x-2">
+                                  <CreditCard className="h-4 w-4 text-green-500" />
+                                  <span className="font-mono text-sm text-gray-900">{attribution.simCardNumber}</span>
+                                </div>
+                              ) : (
+                                <span className="text-gray-400 text-sm">Non assignée</span>
+                              )}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <div className="flex items-center space-x-2">
+                                <Calendar className="h-4 w-4 text-gray-400" />
+                                <span className="text-sm text-gray-900">
+                                  {new Date(attribution.assignmentDate).toLocaleDateString("fr-FR")}
+                                </span>
+                              </div>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap">{getStatusBadge(attribution.status)}</td>
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <div className="flex items-center space-x-2">
+                                <User className="h-4 w-4 text-gray-400" />
+                                <span className="text-sm text-gray-900">{attribution.assignedBy}</span>
+                              </div>
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                  <Button variant="ghost" className="h-8 w-8 p-0">
+                                    <MoreHorizontal className="h-4 w-4" />
+                                  </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end">
+                                  <DropdownMenuItem onClick={() => handleView(attribution)}>
+                                    <Eye className="mr-2 h-4 w-4" />
+                                    Voir détails
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem onClick={() => handleEdit(attribution)}>
+                                    <Edit className="mr-2 h-4 w-4" />
+                                    Modifier
+                                  </DropdownMenuItem>
+                                  {attribution.status === "ACTIVE" && (
+                                    <DropdownMenuItem onClick={() => handleReturn(attribution.id)}>
+                                      <RotateCcw className="mr-2 h-4 w-4" />
+                                      Retourner
+                                    </DropdownMenuItem>
+                                  )}
+                                  <DropdownMenuItem onClick={() => handleDelete(attribution.id)} className="text-red-600">
+                                    <Trash2 className="mr-2 h-4 w-4" />
+                                    Supprimer
+                                  </DropdownMenuItem>
+                                </DropdownMenuContent>
+                              </DropdownMenu>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  {/* Pagination */}
+                  {pagination.totalPages > 1 && (
+                    <div className="flex items-center justify-between mt-6">
+                      <div className="text-sm text-gray-600">
+                        Affichage de {((pagination.page - 1) * pagination.limit) + 1} à{" "}
+                        {Math.min(pagination.page * pagination.limit, pagination.total)} sur {pagination.total}{" "}
+                        résultats
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handlePageChange(pagination.page - 1)}
+                          disabled={pagination.page === 1}
+                        >
+                          <ChevronLeft className="h-4 w-4" />
+                          Précédent
+                        </Button>
+                        <span className="text-sm text-gray-600">
+                          Page {pagination.page} sur {pagination.totalPages}
+                        </span>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handlePageChange(pagination.page + 1)}
+                          disabled={pagination.page === pagination.totalPages}
+                        >
+                          Suivant
+                          <ChevronRight className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+                </>
               )}
             </CardContent>
           </Card>
