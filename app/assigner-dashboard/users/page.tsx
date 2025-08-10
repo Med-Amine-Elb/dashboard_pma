@@ -6,12 +6,13 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { Search, Bell, Globe, Phone, Mail, Building, ChevronLeft, ChevronRight } from "lucide-react"
+import { Search, Bell, Globe, Phone, Mail, Building, ChevronLeft, ChevronRight, RefreshCw } from "lucide-react"
 import { Sidebar } from "@/components/sidebar"
 import { DataTable } from "@/components/data-table"
 import { useToast } from "@/hooks/use-toast"
 import { UserManagementApi } from "@/api/generated/apis/user-management-api"
 import { AttributionManagementApi } from "@/api/generated/apis/attribution-management-api"
+import { SIMCardManagementApi } from "@/api/generated/apis/simcard-management-api"
 import { getApiConfig } from "@/lib/apiClient"
 import { UserDto } from "@/api/generated/models"
 
@@ -64,6 +65,20 @@ export default function AssignerUsersPage() {
 
     fetchUsers()
   }, [pagination.page, pagination.limit, statusFilter, searchTerm])
+
+  // Refresh data when page becomes visible
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (!document.hidden) {
+        fetchUsers()
+      }
+    }
+
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+    }
+  }, [])
 
   const fetchUsers = async () => {
     setLoading(true)
@@ -177,6 +192,56 @@ export default function AssignerUsersPage() {
          } catch (error) {
            console.error(`Error fetching assignments for user ${user.name}:`, error)
          }
+         
+                   // Only check direct SIM card assignments if no attribution found
+          if (!assignedSim) {
+            try {
+              console.log(`Checking direct SIM assignments for user ${user.name} (ID: ${user.id})`)
+              const simCardApi = new SIMCardManagementApi(getApiConfig(token))
+                             const simCardsRes = await simCardApi.getSimCards(
+                 undefined, // page
+                 undefined, // limit
+                 "ASSIGNED", // status - only get assigned SIMs
+                 undefined, // assignedTo
+                 undefined // search
+               )
+              
+              console.log(`SIM cards response for user ${user.name}:`, simCardsRes.data)
+              
+              if (simCardsRes.data && typeof simCardsRes.data === 'object') {
+                const responseData = simCardsRes.data as any
+                let simCards: any[] = []
+                
+                                 if (responseData.success && responseData.data) {
+                   simCards = (responseData.data.simCards as any[]) || (responseData.data.simcards as any[]) || []
+                 } else if (Array.isArray(responseData)) {
+                   simCards = responseData
+                 } else if (responseData.simCards) {
+                   simCards = (responseData.simCards as any[]) || []
+                 } else if (responseData.simcards) {
+                   simCards = (responseData.simcards as any[]) || []
+                 }
+                
+                console.log(`Total SIM cards found: ${simCards.length}`)
+                
+                // Find SIM cards directly assigned to this user
+                const userSimCards = simCards.filter((sim: any) => {
+                  console.log(`Checking SIM ${sim.number} - assignedToId: ${sim.assignedToId}, user.id: ${user.id}`)
+                  return sim.assignedToId === parseInt(user.id) || sim.assignedTo?.id === parseInt(user.id)
+                })
+                
+                console.log(`SIM cards assigned to ${user.name}:`, userSimCards)
+                
+                if (userSimCards.length > 0) {
+                  const assignedSimCard = userSimCards[0] // Take the first assigned SIM
+                  assignedSim = assignedSimCard.number
+                  console.log(`Found direct SIM assignment for ${user.name}: SIM=${assignedSim}`)
+                }
+              }
+            } catch (error) {
+              console.error(`Error fetching direct SIM assignments for user ${user.name}:`, error)
+            }
+          }
          
          console.log(`User ${user.name} - Personal Phone: ${user.phone}, Assigned Phone: ${assignedPhone}, SIM: ${assignedSim}`)
          
@@ -335,6 +400,16 @@ export default function AssignerUsersPage() {
                     Liste des Utilisateurs ({pagination.total})
                   </CardTitle>
                   <div className="flex items-center space-x-4">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={fetchUsers}
+                      disabled={loading}
+                      className="flex items-center space-x-2"
+                    >
+                      <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+                      <span>Actualiser</span>
+                    </Button>
                     <select
                       className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                       value={statusFilter}
