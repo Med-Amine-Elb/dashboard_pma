@@ -11,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea"
 import { Badge } from "@/components/ui/badge"
 import { Search, User, Phone, CreditCard, Check } from "lucide-react"
-import { UserManagementApi, PhoneManagementApi, SIMCardManagementApi } from "@/api/generated";
+import { UserManagementApi, PhoneManagementApi, SIMCardManagementApi, AttributionManagementApi } from "@/api/generated";
 import { getApiConfig } from "@/lib/apiClient";
 
 interface Attribution {
@@ -57,6 +57,9 @@ export function AttributionModal({ isOpen, onClose, onSave, attribution }: Attri
   const [showSimSuggestions, setShowSimSuggestions] = useState(false);
   const [selectedSimIndex, setSelectedSimIndex] = useState(-1);
   const simInputRef = useRef<HTMLInputElement>(null);
+  const [currentAssignments, setCurrentAssignments] = useState<{ phone?: string; sim?: string; }>({});
+  const [assignedPhones, setAssignedPhones] = useState<Set<string>>(new Set());
+  const [assignedSims, setAssignedSims] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     if (attribution) {
@@ -87,6 +90,7 @@ export function AttributionModal({ isOpen, onClose, onSave, attribution }: Attri
         const userApi = new UserManagementApi(getApiConfig(token));
         const phoneApi = new PhoneManagementApi(getApiConfig(token));
         const simApi = new SIMCardManagementApi(getApiConfig(token));
+        const attributionApi = new AttributionManagementApi(getApiConfig(token));
         
         // Fetch all users with pagination to get complete list
         const usersRes = await userApi.getUsers(
@@ -100,8 +104,19 @@ export function AttributionModal({ isOpen, onClose, onSave, attribution }: Attri
         
         console.log("Attribution Modal - Users API Response:", usersRes);
         
-        const phonesRes = await phoneApi.getPhones();
-        const simsRes = await simApi.getSimCards();
+        // Fetch all phones and SIMs with high limits to get complete lists
+        const phonesRes = await phoneApi.getPhones(1, 1000);
+        const simsRes = await simApi.getSimCards(1, 1000);
+        
+                 // Fetch all attributions (both active and returned) to track what's already assigned
+         const attributionsRes = await attributionApi.getAttributions(
+           1,        // page
+           1000,     // limit
+           undefined, // status - get all attributions (ACTIVE, RETURNED, PENDING)
+           undefined, // userId
+           undefined, // assignedBy
+           undefined  // search
+         );
         
         const responseData = usersRes.data as any;
         let apiUsers: any[] = [];
@@ -115,12 +130,85 @@ export function AttributionModal({ isOpen, onClose, onSave, attribution }: Attri
           apiUsers = responseData;
         }
         
+        // Extract phones and SIMs data
+        let apiPhones: any[] = [];
+        let apiSims: any[] = [];
+        
+        if (phonesRes.data && typeof phonesRes.data === 'object') {
+          const phoneData = phonesRes.data as any;
+          if (phoneData.success && phoneData.data) {
+            apiPhones = (phoneData.data.phones as any[]) || [];
+          } else if (phoneData.phones) {
+            apiPhones = (phoneData.phones as any[]) || [];
+          } else if (Array.isArray(phoneData)) {
+            apiPhones = phoneData;
+          }
+        }
+        
+        if (simsRes.data && typeof simsRes.data === 'object') {
+          const simData = simsRes.data as any;
+          if (simData.success && simData.data) {
+            apiSims = (simData.data.simcards as any[]) || (simData.data.simCards as any[]) || [];
+          } else if (simData.simcards) {
+            apiSims = (simData.simcards as any[]) || [];
+          } else if (simData.simCards) {
+            apiSims = (simData.simCards as any[]) || [];
+          } else if (Array.isArray(simData)) {
+            apiSims = simData;
+          }
+        }
+        
+        // Extract attributions to track assigned items
+        let attributions: any[] = [];
+        if (attributionsRes.data && typeof attributionsRes.data === 'object') {
+          const attrData = attributionsRes.data as any;
+          if (attrData.success && attrData.data) {
+            attributions = (attrData.data.attributions as any[]) || [];
+          } else if (attrData.attributions) {
+            attributions = (attrData.attributions as any[]) || [];
+          } else if (Array.isArray(attrData)) {
+            attributions = attrData;
+          }
+        }
+        
+                 // Track assigned phones and SIMs (only from ACTIVE attributions)
+         const assignedPhoneIds = new Set<string>();
+         const assignedSimIds = new Set<string>();
+         
+         attributions.forEach((attr: any) => {
+           // Only consider ACTIVE attributions as currently assigned
+           if (attr.status === "ACTIVE") {
+             if (attr.phoneId) assignedPhoneIds.add(attr.phoneId.toString());
+             if (attr.simCardId) assignedSimIds.add(attr.simCardId.toString());
+           }
+         });
+         
+         // Also check for directly assigned SIMs (from SIM cards page)
+         apiSims.forEach((sim: any) => {
+           if (sim.status === "ASSIGNED" && sim.assignedToId) {
+             assignedSimIds.add(sim.id?.toString() || '');
+           }
+         });
+         
+         // Also check for directly assigned phones (if any)
+         apiPhones.forEach((phone: any) => {
+           if (phone.status === "ASSIGNED" && phone.assignedToId) {
+             assignedPhoneIds.add(phone.id?.toString() || '');
+           }
+         });
+        
         console.log("Attribution Modal - Extracted users:", apiUsers);
         console.log("Attribution Modal - Total users loaded:", apiUsers.length);
+        console.log("Attribution Modal - Total phones loaded:", apiPhones.length);
+        console.log("Attribution Modal - Total SIMs loaded:", apiSims.length);
+        console.log("Attribution Modal - Assigned phones:", assignedPhoneIds);
+        console.log("Attribution Modal - Assigned SIMs:", assignedSimIds);
         
         setUsers(apiUsers);
-        setPhones((phonesRes.data.data as any)?.phones || []);
-        setSimCards((simsRes.data.data as any)?.simcards || []);
+        setPhones(apiPhones);
+        setSimCards(apiSims);
+        setAssignedPhones(assignedPhoneIds);
+        setAssignedSims(assignedSimIds);
       } catch (err) {
         console.error("Attribution Modal - Error fetching data:", err);
         setUsers([]); setPhones([]); setSimCards([]);
@@ -131,6 +219,24 @@ export function AttributionModal({ isOpen, onClose, onSave, attribution }: Attri
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
+    
+    // Validation: Ensure required fields are present
+    if (!formData.userId) {
+      alert("Veuillez sélectionner un utilisateur.");
+      return;
+    }
+    
+    // Validation: Check for potential conflicts
+    if (formData.simCardId && currentAssignments.sim && formData.simCardNumber !== currentAssignments.sim) {
+      const confirmReplace = confirm(
+        `Cet utilisateur a déjà une carte SIM assignée (${currentAssignments.sim}). ` +
+        `Voulez-vous vraiment la remplacer par ${formData.simCardNumber} ?`
+      );
+      if (!confirmReplace) {
+        return;
+      }
+    }
+    
     onSave(formData)
   }
 
@@ -153,7 +259,7 @@ export function AttributionModal({ isOpen, onClose, onSave, attribution }: Attri
     return nameMatch || emailMatch || deptMatch;
   });
 
-  const handleUserSelect = (userId: string) => {
+  const handleUserSelect = async (userId: string) => {
     const selectedUser = users.find((u) => u.id === userId)
     if (selectedUser) {
       setFormData((prev) => ({
@@ -165,18 +271,124 @@ export function AttributionModal({ isOpen, onClose, onSave, attribution }: Attri
       setUserSearch(selectedUser.name + " - " + selectedUser.email);
       setShowUserSuggestions(false);
       setSelectedUserIndex(-1);
+      
+      // Fetch current assignments for this user
+      await fetchCurrentAssignments(userId);
+    }
+  }
+  
+  const fetchCurrentAssignments = async (userId: string) => {
+    try {
+      const token = localStorage.getItem("jwt_token");
+      if (!token) return;
+      
+      const attributionApi = new AttributionManagementApi(getApiConfig(token));
+      const simApi = new SIMCardManagementApi(getApiConfig(token));
+      
+             // Check attributions first (both active and returned to show current assignments)
+       const attributionsRes = await attributionApi.getAttributions(
+         undefined, // page
+         undefined, // limit
+         undefined, // status - get all statuses to show current assignments
+         parseInt(userId), // userId
+         undefined, // assignedBy
+         undefined // search
+       );
+      
+      let currentPhone = undefined;
+      let currentSim = undefined;
+      
+      // Extract attribution data
+      if (attributionsRes.data && typeof attributionsRes.data === 'object') {
+        const responseData = attributionsRes.data as any;
+        let attributions: any[] = [];
+        
+        if (responseData.success && responseData.data) {
+          attributions = (responseData.data.attributions as any[]) || [];
+        } else if (Array.isArray(responseData)) {
+          attributions = responseData;
+        } else if (responseData.attributions) {
+          attributions = (responseData.attributions as any[]) || [];
+        }
+        
+                 if (attributions.length > 0) {
+           // Get the most recent attribution (active or returned)
+           const mostRecentAttribution = attributions.sort((a: any, b: any) => 
+             new Date(b.assignmentDate).getTime() - new Date(a.assignmentDate).getTime()
+           )[0];
+           
+           currentPhone = mostRecentAttribution.phoneModel || mostRecentAttribution.phone?.model;
+           currentSim = mostRecentAttribution.simCardNumber || mostRecentAttribution.simCard?.number;
+           
+           // Add status indicator
+           if (mostRecentAttribution.status === "RETURNED") {
+             currentPhone = currentPhone ? `${currentPhone} (Retourné)` : undefined;
+             currentSim = currentSim ? `${currentSim} (Retourné)` : undefined;
+           }
+         }
+      }
+      
+      // If no SIM found in attributions, check direct SIM assignments
+      if (!currentSim) {
+        const simCardsRes = await simApi.getSimCards(
+          undefined, // page
+          undefined, // limit
+          "ASSIGNED", // status
+          undefined, // assignedTo
+          undefined // search
+        );
+        
+        if (simCardsRes.data && typeof simCardsRes.data === 'object') {
+          const responseData = simCardsRes.data as any;
+          let simCards: any[] = [];
+          
+          if (responseData.success && responseData.data) {
+            simCards = (responseData.data.simcards as any[]) || (responseData.data.simCards as any[]) || [];
+          } else if (Array.isArray(responseData)) {
+            simCards = responseData;
+          } else if (responseData.simcards) {
+            simCards = (responseData.simcards as any[]) || [];
+          } else if (responseData.simCards) {
+            simCards = (responseData.simCards as any[]) || [];
+          }
+          
+          const userSimCards = simCards.filter((sim: any) => 
+            sim.assignedToId === parseInt(userId) || sim.assignedTo?.id === parseInt(userId)
+          );
+          
+          if (userSimCards.length > 0) {
+            currentSim = userSimCards[0].number;
+          }
+        }
+      }
+      
+      setCurrentAssignments({ phone: currentPhone, sim: currentSim });
+      console.log(`Current assignments for user ${userId}:`, { phone: currentPhone, sim: currentSim });
+      
+    } catch (error) {
+      console.error(`Error fetching current assignments for user ${userId}:`, error);
     }
   }
 
-  // Enhanced phone filtering
+  // Enhanced phone filtering - exclude assigned phones
   const filteredPhones = phones.filter(
-    (phone) =>
-      phone.model?.toLowerCase().includes(phoneSearch.toLowerCase()) ||
-      phone.brand?.toLowerCase().includes(phoneSearch.toLowerCase()) ||
-      phone.serialNumber?.toLowerCase().includes(phoneSearch.toLowerCase()) ||
-      phone.imei?.toLowerCase().includes(phoneSearch.toLowerCase()) ||
-      phone.color?.toLowerCase().includes(phoneSearch.toLowerCase()) ||
-      phone.storage?.toLowerCase().includes(phoneSearch.toLowerCase())
+    (phone) => {
+      // Skip if phone is already assigned
+      if (assignedPhones.has(phone.id?.toString() || '')) {
+        return false;
+      }
+      
+      // Check search criteria
+      const searchLower = phoneSearch.toLowerCase();
+      return (
+        phone.model?.toLowerCase().includes(searchLower) ||
+        phone.brand?.toLowerCase().includes(searchLower) ||
+        phone.serialNumber?.toLowerCase().includes(searchLower) ||
+        phone.imei?.toLowerCase().includes(searchLower) ||
+        phone.color?.toLowerCase().includes(searchLower) ||
+        phone.storage?.toLowerCase().includes(searchLower)
+      );
+    }
   );
 
   const handlePhoneSelect = (phoneId: string) => {
@@ -204,12 +416,27 @@ export function AttributionModal({ isOpen, onClose, onSave, attribution }: Attri
     }
   }
 
-  // Enhanced SIM filtering
+  // Enhanced SIM filtering - exclude assigned SIMs and ensure one SIM per user
   const filteredSims = simCards.filter(
-    (sim) =>
-      sim.number?.toLowerCase().includes(simSearch.toLowerCase()) ||
-      sim.carrier?.toLowerCase().includes(simSearch.toLowerCase()) ||
-      sim.iccid?.toLowerCase().includes(simSearch.toLowerCase())
+    (sim) => {
+      // Skip if SIM is already assigned
+      if (assignedSims.has(sim.id?.toString() || '')) {
+        return false;
+      }
+      
+      // Skip if user already has a SIM (one SIM per user rule)
+      if (formData.userId && sim.assignedToId === parseInt(formData.userId)) {
+        return false;
+      }
+      
+      // Check search criteria
+      const searchLower = simSearch.toLowerCase();
+      return (
+        sim.number?.toLowerCase().includes(searchLower) ||
+        sim.carrier?.toLowerCase().includes(searchLower) ||
+        sim.iccid?.toLowerCase().includes(searchLower)
+      );
+    }
   );
 
   const handleSimSelect = (simId: string) => {
@@ -369,6 +596,27 @@ export function AttributionModal({ isOpen, onClose, onSave, attribution }: Attri
                   </div>
                 )}
               </div>
+              
+              {/* Current Assignments Display */}
+              {formData.userId && (currentAssignments.phone || currentAssignments.sim) && (
+                <div className="mt-3 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                  <div className="text-sm font-medium text-blue-800 mb-2">Assignations actuelles :</div>
+                  <div className="space-y-1 text-sm text-blue-700">
+                    {currentAssignments.phone && (
+                      <div className="flex items-center space-x-2">
+                        <Phone className="h-3 w-3" />
+                        <span>Téléphone : {currentAssignments.phone}</span>
+                      </div>
+                    )}
+                    {currentAssignments.sim && (
+                      <div className="flex items-center space-x-2">
+                        <CreditCard className="h-3 w-3" />
+                        <span>SIM : {currentAssignments.sim}</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
 
             <div className="space-y-2">
@@ -479,6 +727,17 @@ export function AttributionModal({ isOpen, onClose, onSave, attribution }: Attri
 
             <div className="space-y-2">
               <Label htmlFor="simCard">Carte SIM (optionnel)</Label>
+              
+              {/* Warning if user already has a SIM */}
+              {currentAssignments.sim && (
+                <div className="p-2 bg-yellow-50 border border-yellow-200 rounded-lg">
+                  <div className="text-sm text-yellow-800">
+                    ⚠️ Cet utilisateur a déjà une carte SIM assignée ({currentAssignments.sim}). 
+                    L'attribution d'une nouvelle carte SIM remplacera l'assignation existante.
+                  </div>
+                </div>
+              )}
+              
               <div className="relative">
                 <div className="relative">
                   <CreditCard className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />

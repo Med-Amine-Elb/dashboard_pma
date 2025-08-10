@@ -399,30 +399,20 @@ export default function AssignerUsersPage() {
                   <CardTitle className="text-xl font-bold">
                     Liste des Utilisateurs ({pagination.total})
                   </CardTitle>
-                  <div className="flex items-center space-x-4">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={fetchUsers}
-                      disabled={loading}
-                      className="flex items-center space-x-2"
-                    >
-                      <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
-                      <span>Actualiser</span>
-                    </Button>
-                    <select
-                      className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      value={statusFilter}
-                      onChange={(e) => setStatusFilter(e.target.value)}
-                    >
-                      <option value="all">Tous les statuts</option>
-                      <option value="active">Actif</option>
-                      <option value="inactive">Inactif</option>
-                    </select>
-                    <div className="text-sm text-gray-500 bg-blue-50 px-3 py-2 rounded-lg">
-                      Mode consultation uniquement
-                    </div>
-                  </div>
+                                     <div className="flex items-center space-x-4">
+                     <select
+                       className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                       value={statusFilter}
+                       onChange={(e) => setStatusFilter(e.target.value)}
+                     >
+                       <option value="all">Tous les statuts</option>
+                       <option value="active">Actif</option>
+                       <option value="inactive">Inactif</option>
+                     </select>
+                     <div className="text-sm text-gray-500 bg-blue-50 px-3 py-2 rounded-lg">
+                       Mode consultation uniquement
+                     </div>
+                   </div>
                 </div>
               </CardHeader>
               <CardContent>

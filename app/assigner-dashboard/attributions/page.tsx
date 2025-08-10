@@ -29,6 +29,8 @@ import {
 } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { AttributionManagementApi } from "@/api/generated/apis/attribution-management-api"
+import { SIMCardManagementApi } from "@/api/generated/apis/simcard-management-api"
+import { UserManagementApi } from "@/api/generated/apis/user-management-api"
 import { getApiConfig } from "@/lib/apiClient"
 import { AttributionDto } from "@/api/generated/models"
 import axios from "axios"
@@ -95,7 +97,9 @@ export default function AssignerAttributionsPage() {
         return
       }
 
-      const api = new AttributionManagementApi(getApiConfig(token))
+             const attributionApi = new AttributionManagementApi(getApiConfig(token))
+       const simApi = new SIMCardManagementApi(getApiConfig(token))
+       const userApi = new UserManagementApi(getApiConfig(token))
       
       // Convert status filter to API format
       let statusParam: "ACTIVE" | "PENDING" | "RETURNED" | undefined
@@ -103,7 +107,8 @@ export default function AssignerAttributionsPage() {
         statusParam = statusFilter.toUpperCase() as "ACTIVE" | "PENDING" | "RETURNED"
       }
 
-      const res = await api.getAttributions(
+      // Fetch regular attributions
+      const attributionRes = await attributionApi.getAttributions(
         pagination.page,
         pagination.limit,
         statusParam,
@@ -112,14 +117,14 @@ export default function AssignerAttributionsPage() {
         searchTerm || undefined
       )
 
-      console.log("API Response:", res)
+      console.log("Attribution API Response:", attributionRes)
 
-      // Extract data from response
+      // Extract attribution data from response
       let apiAttributions: any[] = []
       let paginationData: any = {}
 
-      if (res.data && typeof res.data === 'object') {
-        const responseData = res.data as any
+      if (attributionRes.data && typeof attributionRes.data === 'object') {
+        const responseData = attributionRes.data as any
         if (responseData.success && responseData.data) {
           apiAttributions = (responseData.data.attributions as any[]) || []
           paginationData = responseData.data.pagination || {}
@@ -131,10 +136,97 @@ export default function AssignerAttributionsPage() {
         }
       }
 
+             // Fetch direct SIM assignments (only if status filter is "all" or "ACTIVE")
+       let directSimAssignments: any[] = []
+       if (statusFilter === "all" || statusFilter === "ACTIVE") {
+         try {
+           const simRes = await simApi.getSimCards(
+             undefined, // page
+             undefined, // limit
+             "ASSIGNED", // status - only assigned SIMs
+             undefined, // assignedTo
+             searchTerm || undefined // search
+           )
+
+           console.log("SIM API Response:", simRes)
+
+           if (simRes.data && typeof simRes.data === 'object') {
+             const simResponseData = simRes.data as any
+             let simCards: any[] = []
+             
+             if (simResponseData.success && simResponseData.data) {
+               simCards = (simResponseData.data.simcards as any[]) || (simResponseData.data.simCards as any[]) || []
+             } else if (Array.isArray(simResponseData)) {
+               simCards = simResponseData
+             } else if (simResponseData.simcards) {
+               simCards = (simResponseData.simcards as any[]) || []
+             } else if (simResponseData.simCards) {
+               simCards = (simResponseData.simCards as any[]) || []
+             }
+
+             // Filter out SIMs that are already in attributions
+             const attributionSimIds = new Set(apiAttributions.map(attr => attr.simCardId?.toString()))
+             const filteredSimCards = simCards.filter((sim: any) => 
+               sim.assignedToId && 
+               !attributionSimIds.has(sim.id?.toString())
+             )
+
+             // Fetch user data for each assigned SIM
+             for (const sim of filteredSimCards) {
+               try {
+                                                       if (sim.assignedToId) {
+                     const userRes = await userApi.getUsers(
+                       1, // page
+                       1000, // limit
+                       undefined, // search
+                       undefined, // department
+                       undefined, // status
+                       undefined // role
+                     )
+                     if (userRes.data && typeof userRes.data === 'object') {
+                       const userData = userRes.data as any
+                       let users: any[] = []
+                       
+                       if (userData.success && userData.data) {
+                         users = (userData.data.users as any[]) || []
+                       } else if (userData.users) {
+                         users = (userData.users as any[]) || []
+                       } else if (Array.isArray(userData)) {
+                         users = userData
+                       }
+                       
+                       // Find the specific user by ID
+                       const user = users.find((u: any) => u.id === parseInt(sim.assignedToId))
+                       
+                       if (user) {
+                         directSimAssignments.push({
+                           ...sim,
+                           assignedTo: user
+                         })
+                       } else {
+                         // If user not found, still add the SIM with basic info
+                         directSimAssignments.push(sim)
+                       }
+                     }
+                   }
+               } catch (userError) {
+                 console.error(`Error fetching user data for SIM ${sim.id}:`, userError)
+                 // Still add the SIM even if user fetch fails
+                 directSimAssignments.push(sim)
+               }
+             }
+           }
+         } catch (simError) {
+           console.error("Error fetching direct SIM assignments:", simError)
+           // Don't fail the whole request if SIM fetch fails
+         }
+       }
+
       console.log("Processed attributions:", apiAttributions)
+      console.log("Direct SIM assignments:", directSimAssignments)
       console.log("Pagination data:", paginationData)
 
-      // Transform API data to match our interface
+      // Transform attribution data to match our interface
       const transformedAttributions: Attribution[] = apiAttributions.map((attr: any) => ({
         id: attr.id?.toString() || "",
         userId: attr.userId?.toString() || "",
@@ -151,15 +243,36 @@ export default function AssignerAttributionsPage() {
         notes: attr.notes || "",
       }))
 
-      setAttributions(transformedAttributions)
-      setFilteredAttributions(transformedAttributions)
+      // Transform direct SIM assignments to attribution format
+      const transformedDirectAssignments: Attribution[] = directSimAssignments.map((sim: any) => ({
+        id: `sim-${sim.id}`, // Use a prefix to distinguish from regular attributions
+        userId: sim.assignedToId?.toString() || "",
+        userName: sim.assignedTo?.name || "",
+        userEmail: sim.assignedTo?.email || "",
+        phoneId: undefined,
+        phoneModel: undefined,
+        simCardId: sim.id?.toString(),
+        simCardNumber: sim.number || "",
+        assignedBy: "Direct Assignment", // Since we don't have this info for direct assignments
+        assignmentDate: sim.assignedDate || new Date().toISOString().split('T')[0],
+        returnDate: undefined,
+        status: "ACTIVE" as const,
+        notes: "Attribution directe depuis la page Cartes SIM",
+      }))
 
-      // Update pagination info
+      // Combine both types of assignments
+      const allAssignments = [...transformedAttributions, ...transformedDirectAssignments]
+
+      setAttributions(allAssignments)
+      setFilteredAttributions(allAssignments)
+
+      // Update pagination info (adjust for combined results)
+      const totalItems = apiAttributions.length + directSimAssignments.length
       if (paginationData.total !== undefined) {
         setPagination(prev => ({
           ...prev,
-          total: paginationData.total,
-          totalPages: paginationData.totalPages || Math.ceil(paginationData.total / prev.limit),
+          total: totalItems,
+          totalPages: Math.ceil(totalItems / prev.limit),
         }))
       }
 
