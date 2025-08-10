@@ -160,6 +160,8 @@ export default function SimAssignmentsPage() {
         monthlyFee: sim.monthlyFee || 0,
       }))
 
+      console.log("Transformed SIM cards:", transformedSimCards)
+
       setSimCards(transformedSimCards)
       setFilteredSimCards(transformedSimCards)
 
@@ -180,6 +182,8 @@ export default function SimAssignmentsPage() {
         errorMessage = "Accès refusé. Vérifiez vos permissions d'accès."
       } else if (error.response?.data?.message) {
         errorMessage = error.response.data.message
+      } else if (error.response?.data?.error?.message) {
+        errorMessage = error.response.data.error.message
       }
       
       setError(errorMessage)
@@ -265,6 +269,9 @@ export default function SimAssignmentsPage() {
 
   const handleReturnSim = async (simId: string) => {
     try {
+      setLoading(true) // Add loading state
+      setError(null)
+      
       const token = localStorage.getItem("jwt_token")
       if (!token) {
         toast({
@@ -299,16 +306,22 @@ export default function SimAssignmentsPage() {
         return
       }
 
+      console.log("Calling unassignSimCard API for SIM ID:", simId)
       const api = new SIMCardManagementApi(getApiConfig(token))
-      await api.unassignSimCard(parseInt(simId))
+      const response = await api.unassignSimCard(parseInt(simId))
       
-      // Refresh the data
-      fetchSimCards()
+      console.log("Unassign API response:", response)
       
+      // Show success message
       toast({
         title: "Carte SIM retournée",
         description: `La carte SIM ${simCard.number} a été marquée comme disponible.`,
       })
+      
+      // Refresh the data immediately
+      console.log("Refreshing SIM cards data...")
+      await fetchSimCards()
+      
     } catch (error: any) {
       console.error("Error returning SIM card:", error)
       
@@ -320,6 +333,8 @@ export default function SimAssignmentsPage() {
         errorMessage = "Carte SIM introuvable"
       } else if (error.response?.status === 400) {
         errorMessage = "La carte SIM n'est pas assignée et ne peut pas être retournée"
+      } else if (error.response?.status === 403) {
+        errorMessage = "Permission refusée pour cette action"
       }
       
       toast({
@@ -327,6 +342,8 @@ export default function SimAssignmentsPage() {
         description: errorMessage,
         variant: "destructive",
       })
+    } finally {
+      setLoading(false)
     }
   }
 
@@ -340,6 +357,9 @@ export default function SimAssignmentsPage() {
     if (!selectedSim) return
 
     try {
+      setLoading(true)
+      setError(null)
+      
       const token = localStorage.getItem("jwt_token")
       if (!token) {
         toast({
@@ -350,29 +370,50 @@ export default function SimAssignmentsPage() {
         return
       }
 
+      console.log("Calling assignSimCard API for SIM ID:", selectedSim.id, "User ID:", assignmentData.userId)
       const api = new SIMCardManagementApi(getApiConfig(token))
       
       // Assign SIM card to user
-      await api.assignSimCard(parseInt(selectedSim.id), {
+      const response = await api.assignSimCard(parseInt(selectedSim.id), {
         userId: parseInt(assignmentData.userId)
       })
 
-      // Refresh the data
-      fetchSimCards()
+      console.log("Assign API response:", response)
 
+      // Show success message
       toast({
         title: "Attribution réussie",
         description: `Carte SIM assignée à ${assignmentData.userName}`,
       })
 
+      // Close modal first
       setIsAssignmentModalOpen(false)
+      
+      // Refresh the data immediately
+      console.log("Refreshing SIM cards data after assignment...")
+      await fetchSimCards()
+      
     } catch (error: any) {
       console.error("Error assigning SIM card:", error)
+      
+      let errorMessage = "Impossible d'assigner la carte SIM"
+      if (error.response?.data?.error?.message) {
+        errorMessage = error.response.data.error.message
+      } else if (error.response?.status === 400) {
+        errorMessage = "Données d'attribution invalides"
+      } else if (error.response?.status === 403) {
+        errorMessage = "Permission refusée pour cette action"
+      } else if (error.response?.status === 404) {
+        errorMessage = "Carte SIM ou utilisateur introuvable"
+      }
+      
       toast({
         title: "Erreur",
-        description: "Impossible d'assigner la carte SIM",
+        description: errorMessage,
         variant: "destructive",
       })
+    } finally {
+      setLoading(false)
     }
   }
 
@@ -519,7 +560,11 @@ export default function SimAssignmentsPage() {
                                   size="sm"
                                   onClick={() => handleAssignSim(sim)}
                                   className="bg-gradient-to-r from-emerald-500 to-green-600 text-white"
+                                  disabled={loading}
                                 >
+                                  {loading ? (
+                                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                                  ) : null}
                                   <User className="h-4 w-4 mr-1" />
                                   Assigner
                                 </Button>
@@ -530,7 +575,11 @@ export default function SimAssignmentsPage() {
                                   variant="outline"
                                   onClick={() => handleReturnSim(sim.id)}
                                   className="text-orange-600 hover:text-orange-700"
+                                  disabled={loading}
                                 >
+                                  {loading ? (
+                                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-orange-600 mr-2"></div>
+                                  ) : null}
                                   Retourner
                                 </Button>
                               )}
