@@ -28,23 +28,23 @@ import {
 } from "lucide-react"
 import { Sidebar } from "@/components/sidebar"
 import { useToast } from "@/hooks/use-toast"
-import { UserManagementApi } from "@/api/generated";
-import { getApiConfig, getUserIdFromToken } from "@/lib/apiClient";
+import { AuthenticationApi, UserManagementApi } from "@/api/generated";
+import { getApiConfig } from "@/lib/apiClient";
 
 export default function ProfilePage() {
   const [user, setUser] = useState({
-    name: "Randy Riley",
-    email: "randy.riley@company.com",
+    name: "",
+    email: "",
     avatar: "",
-    department: "IT Department",
-    position: "Développeur Senior",
-    employeeId: "EMP001",
-    phone: "+33 6 12 34 56 78",
-    extension: "1234",
-    manager: "Sarah Johnson",
-    location: "Paris, France",
-    startDate: "15 mars 2020",
-    lastLogin: "Aujourd'hui à 09:30",
+    department: "",
+    position: "",
+    employeeId: "",
+    phone: "",
+    extension: "",
+    manager: "",
+    location: "",
+    startDate: "",
+    lastLogin: "",
   })
 
   const [isEditing, setIsEditing] = useState(false)
@@ -70,38 +70,52 @@ export default function ProfilePage() {
     setError(null)
     try {
       const token = localStorage.getItem("jwt_token")
-      const userId = getUserIdFromToken(token || "")
-      if (!userId) throw new Error("Utilisateur non authentifié.")
-      const api = new UserManagementApi(getApiConfig(token))
-      const res = await api.getUserById(Number(userId))
-      const u = res.data
+      if (!token) throw new Error("Utilisateur non authentifié.")
+      const authApi = new AuthenticationApi(getApiConfig(token))
+      const res = await authApi.getCurrentUser()
+      const body: any = res.data
+      const u: any = body?.data ?? body
+      // Fetch extended user details (phone, address, manager, position)
+      let details: any = {}
+      try {
+        if (u?.id) {
+          const umApi = new UserManagementApi(getApiConfig(token))
+          const res2 = await umApi.getUserById(Number(u.id))
+          const body2: any = res2.data
+          details = body2?.data ?? body2
+        }
+      } catch {}
       setUser({
-        name: u.name,
-        email: u.email,
-        avatar: u.avatar || "",
-        department: u.department || "",
-        position: u.position || "",
-        employeeId: u.id ? String(u.id) : "",
-        phone: u.phone || "",
-        extension: u.extension || "",
-        manager: u.manager || "",
-        location: u.address || "",
-        startDate: u.joinDate || "",
-        lastLogin: u.lastLogin || "",
+        name: String(u.name || details.name || ""),
+        email: String(u.email || details.email || ""),
+        avatar: String(u.avatar || details.avatar || ""),
+        department: String(u.department || details.department || ""),
+        position: String(u.position || details.position || ""),
+        employeeId: (u.id ?? details.id) ? String(u.id ?? details.id) : "",
+        phone: String((u.phone ?? details.phone) || ""),
+        extension: "",
+        manager: String((u.manager ?? details.manager) || ""),
+        location: String((u.address ?? details.address) || ""),
+        startDate: (u.joinDate || details.joinDate)
+          ? new Date((u.joinDate ?? details.joinDate) as any).toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" })
+          : "",
+        lastLogin: u.lastLogin ? new Date(u.lastLogin).toLocaleString("fr-FR") : "",
       })
       setEditedUser({
-        name: u.name,
-        email: u.email,
-        avatar: u.avatar || "",
-        department: u.department || "",
-        position: u.position || "",
-        employeeId: u.id ? String(u.id) : "",
-        phone: u.phone || "",
-        extension: u.extension || "",
-        manager: u.manager || "",
-        location: u.address || "",
-        startDate: u.joinDate || "",
-        lastLogin: u.lastLogin || "",
+        name: String(u.name || details.name || ""),
+        email: String(u.email || details.email || ""),
+        avatar: String(u.avatar || details.avatar || ""),
+        department: String(u.department || details.department || ""),
+        position: String(u.position || details.position || ""),
+        employeeId: (u.id ?? details.id) ? String(u.id ?? details.id) : "",
+        phone: String((u.phone ?? details.phone) || ""),
+        extension: "",
+        manager: String((u.manager ?? details.manager) || ""),
+        location: String((u.address ?? details.address) || ""),
+        startDate: (u.joinDate || details.joinDate)
+          ? new Date((u.joinDate ?? details.joinDate) as any).toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" })
+          : "",
+        lastLogin: u.lastLogin ? new Date(u.lastLogin).toLocaleString("fr-FR") : "",
       })
     } catch (err: any) {
       setError("Erreur lors du chargement du profil utilisateur.")
@@ -211,7 +225,7 @@ export default function ProfilePage() {
 
           {/* Content */}
           <div className="p-6 space-y-6">
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
               {/* Left Column - Profile Overview */}
               <div className="lg:col-span-1 space-y-6">
                 {/* Profile Card */}
@@ -347,11 +361,7 @@ export default function ProfilePage() {
                               ) : (
                                 <div className="flex items-center space-x-2">
                                   <span className="text-sm text-gray-900">{value as string}</span>
-                                  {!field.editable && (
-                                    <Badge variant="outline" className="text-xs">
-                                      Non modifiable
-                                    </Badge>
-                                  )}
+                                  {/* non modifiable badge removed per request */}
                                 </div>
                               )}
                             </div>
@@ -362,51 +372,52 @@ export default function ProfilePage() {
                   </Card>
                 ))}
 
-                {/* Contact Information */}
-                <Card className="bg-white/90 backdrop-blur-xl border-0 shadow-xl">
-                  <CardHeader>
-                    <CardTitle>Informations de Contact</CardTitle>
-                    <CardDescription>Coordonnées professionnelles</CardDescription>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                      <div className="space-y-3">
-                        <div className="flex items-center space-x-3">
-                          <Mail className="h-4 w-4 text-gray-500" />
-                          <div>
-                            <p className="text-sm font-medium">Email professionnel</p>
-                            <p className="text-sm text-gray-600">{user.email}</p>
-                          </div>
-                        </div>
-                        <div className="flex items-center space-x-3">
-                          <Phone className="h-4 w-4 text-gray-500" />
-                          <div>
-                            <p className="text-sm font-medium">Téléphone d'entreprise</p>
-                            <p className="text-sm text-gray-600">{user.phone}</p>
-                          </div>
-                        </div>
-                      </div>
-                      <div className="space-y-3">
-                        <div className="flex items-center space-x-3">
-                          <Phone className="h-4 w-4 text-gray-500" />
-                          <div>
-                            <p className="text-sm font-medium">Extension</p>
-                            <p className="text-sm text-gray-600">{user.extension}</p>
-                          </div>
-                        </div>
-                        <div className="flex items-center space-x-3">
-                          <MapPin className="h-4 w-4 text-gray-500" />
-                          <div>
-                            <p className="text-sm font-medium">Localisation</p>
-                            <p className="text-sm text-gray-600">{user.location}</p>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
               </div>
             </div>
+
+            {/* Contact Information - Full width */}
+            <Card className="bg-white/90 backdrop-blur-xl border-0 shadow-xl">
+              <CardHeader>
+                <CardTitle>Informations de Contact</CardTitle>
+                <CardDescription>Coordonnées professionnelles</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="space-y-3">
+                    <div className="flex items-center space-x-3">
+                      <Mail className="h-4 w-4 text-gray-500" />
+                      <div>
+                        <p className="text-sm font-medium">Email professionnel</p>
+                        <p className="text-sm text-gray-600">{user.email}</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center space-x-3">
+                      <Phone className="h-4 w-4 text-gray-500" />
+                      <div>
+                        <p className="text-sm font-medium">Téléphone d'entreprise</p>
+                        <p className="text-sm text-gray-600">{user.phone}</p>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="space-y-3">
+                    <div className="flex items-center space-x-3">
+                      <Phone className="h-4 w-4 text-gray-500" />
+                      <div>
+                        <p className="text-sm font-medium">Extension</p>
+                        <p className="text-sm text-gray-600">{user.extension}</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center space-x-3">
+                      <MapPin className="h-4 w-4 text-gray-500" />
+                      <div>
+                        <p className="text-sm font-medium">Localisation</p>
+                        <p className="text-sm text-gray-600">{user.location}</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
           </div>
         </div>
       </div>

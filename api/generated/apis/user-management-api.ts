@@ -100,6 +100,34 @@ export const UserManagementApiAxiosParamCreator = function (configuration?: Conf
             };
         },
         /**
+         * Get my dashboard data
+         * @summary Get my dashboard data
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        getMyDashboard: async (options: RawAxiosRequestConfig = {}): Promise<RequestArgs> => {
+            const localVarPath = `/users/dashboard`;
+            // use dummy base URL string because the URL constructor only accepts absolute URLs.
+            const localVarUrlObj = new URL(localVarPath, DUMMY_BASE_URL);
+            let baseOptions;
+            if (configuration) {
+                baseOptions = configuration.baseOptions;
+            }
+
+            const localVarRequestOptions = { method: 'GET', ...baseOptions, ...options};
+            const localVarHeaderParameter = {} as any;
+            const localVarQueryParameter = {} as any;
+
+            setSearchParams(localVarUrlObj, localVarQueryParameter);
+            let headersFromBaseOptions = baseOptions && baseOptions.headers ? baseOptions.headers : {};
+            localVarRequestOptions.headers = {...localVarHeaderParameter, ...headersFromBaseOptions, ...options.headers};
+
+            return {
+                url: toPathString(localVarUrlObj),
+                options: localVarRequestOptions,
+            };
+        },
+        /**
          * Get user details by ID (Admin/Assigner only)
          * @summary Get user by ID
          * @param {number} id 
@@ -402,6 +430,16 @@ export const UserManagementApiFp = function(configuration?: Configuration) {
             return (axios, basePath) => createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration)(axios, localVarOperationServerBasePath || basePath);
         },
         /**
+         * Get my dashboard data
+         * @summary Get my dashboard data
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        async getMyDashboard(options?: RawAxiosRequestConfig): Promise<(axios?: AxiosInstance, basePath?: string) => AxiosPromise<{ [key: string]: object; }>> {
+            const localVarAxiosArgs = await localVarAxiosParamCreator.getMyDashboard(options);
+            return createRequestFunction(localVarAxiosArgs, globalAxios, BASE_PATH, configuration);
+        },
+        /**
          * Get user details by ID (Admin/Assigner only)
          * @summary Get user by ID
          * @param {number} id 
@@ -522,6 +560,15 @@ export const UserManagementApiFactory = function (configuration?: Configuration,
             return localVarFp.deleteUser(id, options).then((request) => request(axios, basePath));
         },
         /**
+         * Get my dashboard data
+         * @summary Get my dashboard data
+         * @param {*} [options] Override http request option.
+         * @throws {RequiredError}
+         */
+        getMyDashboard(options?: RawAxiosRequestConfig): AxiosPromise<{ [key: string]: object; }> {
+            return localVarFp.getMyDashboard(options).then((request) => request(axios, basePath));
+        },
+        /**
          * Get user details by ID (Admin/Assigner only)
          * @summary Get user by ID
          * @param {number} id 
@@ -625,6 +672,17 @@ export class UserManagementApi extends BaseAPI {
      */
     public deleteUser(id: number, options?: RawAxiosRequestConfig) {
         return UserManagementApiFp(this.configuration).deleteUser(id, options).then((request) => request(this.axios, this.basePath));
+    }
+
+    /**
+     * Get my dashboard data
+     * @summary Get my dashboard data
+     * @param {*} [options] Override http request option.
+     * @throws {RequiredError}
+     * @memberof UserManagementApi
+     */
+    public getMyDashboard(options?: RawAxiosRequestConfig) {
+        return UserManagementApiFp(this.configuration).getMyDashboard(options).then((request) => request(this.axios, this.basePath));
     }
 
     /**

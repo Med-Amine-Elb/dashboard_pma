@@ -29,9 +29,36 @@ import { Sidebar } from "@/components/sidebar"
 import { NotificationsDropdown } from "@/components/notifications-dropdown"
 import { useRouter } from "next/navigation"
 import { UserManagementApi } from "@/api/generated"
-import { getApiConfig, getUserIdFromToken } from "@/lib/apiClient"
+import { getApiConfig } from "@/lib/apiClient"
 
 export default function UserDashboard() {
+  interface DashboardResponse {
+    user: {
+      firstName?: string
+      lastName?: string
+      email?: string
+      profilePicture?: string
+      department?: string
+    }
+    phone?: {
+      model?: string
+      serialNumber?: string
+      imei?: string
+      assignedDate?: string
+      status?: string
+      batteryHealth?: number
+      storageUsed?: number
+      lastSync?: string
+    } | null
+    requests?: Array<{
+      id?: string | number
+      type?: string
+      status?: string
+      createdAt?: string
+      description?: string
+    }>
+  }
+
   const [user, setUser] = useState({
     name: "",
     email: "",
@@ -57,7 +84,7 @@ export default function UserDashboard() {
     lastSync: "",
   })
 
-  const [recentRequests, setRecentRequests] = useState([])
+  const [recentRequests, setRecentRequests] = useState<any[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -78,84 +105,77 @@ export default function UserDashboard() {
   const fetchUserData = async () => {
     setLoading(true)
     setError(null)
-    
     try {
       const token = localStorage.getItem("jwt_token")
-      const userId = getUserIdFromToken(token)
-      
-      if (!token || !userId) {
-        setError("Token invalide")
+      if (!token) {
+        setError("Token invalide ou utilisateur non connecté")
         return
       }
 
       const userApi = new UserManagementApi(getApiConfig(token))
-      
-      // Fetch current user data
-      const userResponse = await userApi.getUserById(userId)
-      const userData = userResponse.data
-      
+      const dashboardResponse = await userApi.getMyDashboard()
+      const responseBody = dashboardResponse.data as any
+      const dashboardData: DashboardResponse = responseBody.data
+
+      const userData = dashboardData.user
       setUser({
         name: `${userData.firstName || ""} ${userData.lastName || ""}`.trim(),
-        email: userData.email || "",
-        avatar: userData.profilePicture || "",
-        department: userData.department || "",
+        email: String(userData.email || ""),
+        avatar: String(userData.profilePicture || ""),
+        department: String(userData.department || ""),
       })
 
-      // Fetch user's phone data
-      const phoneResponse = await userApi.getUserPhone(userId)
-      const phoneData = phoneResponse.data
-      
+      const phoneData = dashboardData.phone
       if (phoneData) {
         setCurrentPhone({
           model: phoneData.model || "",
           serialNumber: phoneData.serialNumber || "",
           imei: phoneData.imei || "",
-          assignedDate: phoneData.assignedDate ? new Date(phoneData.assignedDate).toLocaleDateString("fr-FR", {
-            day: "numeric",
-            month: "long",
-            year: "numeric"
-          }) : "",
+          assignedDate: phoneData.assignedDate
+            ? new Date(phoneData.assignedDate).toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" })
+            : "",
           status: phoneData.status || "",
           batteryHealth: phoneData.batteryHealth || 0,
           storageUsed: phoneData.storageUsed || 0,
           lastSync: phoneData.lastSync ? new Date(phoneData.lastSync).toLocaleString("fr-FR") : "",
         })
 
-        setStats(prev => ({
-          ...prev,
-          currentPhone: phoneData.model || "",
-        }))
+        setStats((prev) => ({ ...prev, currentPhone: phoneData.model || "" }))
+      } else {
+        setCurrentPhone({
+          model: "",
+          serialNumber: "",
+          imei: "",
+          assignedDate: "",
+          status: "Non assigné",
+          batteryHealth: 0,
+          storageUsed: 0,
+          lastSync: "",
+        })
+        setStats((prev) => ({ ...prev, currentPhone: "Aucun téléphone" }))
       }
 
-      // Fetch user's requests
-      const requestsResponse = await userApi.getUserRequests(userId)
-      const requestsData = requestsResponse.data || []
-      
-      const mappedRequests = requestsData.slice(0, 3).map((req: any) => ({
-        id: req.id || "",
-        type: req.type || "",
-        status: req.status || "",
-        date: req.createdAt ? new Date(req.createdAt).toLocaleDateString("fr-FR", {
-          day: "numeric",
-          month: "short",
-          year: "numeric"
-        }) : "",
-        description: req.description || "",
-      }))
-
+      const requestsData = dashboardData.requests || []
+      const mappedRequests = Array.isArray(requestsData)
+        ? requestsData.slice(0, 3).map((req: any) => ({
+            id: req.id || "",
+            type: req.type || "",
+            status: req.status || "",
+            date: req.createdAt
+              ? new Date(req.createdAt).toLocaleDateString("fr-FR", { day: "numeric", month: "short", year: "numeric" })
+              : "",
+            description: req.description || "",
+          }))
+        : []
       setRecentRequests(mappedRequests)
-      
-      // Calculate stats
-      const activeRequests = requestsData.filter((req: any) => req.status === "PENDING" || req.status === "IN_PROGRESS").length
-      const completedRequests = requestsData.filter((req: any) => req.status === "COMPLETED" || req.status === "RESOLVED").length
-      
-      setStats(prev => ({
-        ...prev,
-        activeRequests,
-        completedRequests,
-        avgResponseTime: "2.5 heures", // This would need to be calculated from actual data
-      }))
 
+      const activeRequests = Array.isArray(requestsData)
+        ? requestsData.filter((req: any) => req.status === "PENDING" || req.status === "IN_PROGRESS").length
+        : 0
+      const completedRequests = Array.isArray(requestsData)
+        ? requestsData.filter((req: any) => req.status === "COMPLETED" || req.status === "RESOLVED").length
+        : 0
+      setStats((prev) => ({ ...prev, activeRequests, completedRequests, avgResponseTime: "2.5 heures" }))
     } catch (err: any) {
       console.error("Error fetching user data:", err)
       setError(err.response?.data?.message || "Erreur lors du chargement des données")
@@ -172,18 +192,12 @@ export default function UserDashboard() {
   const getStatusColor = (status: string) => {
     switch (status.toLowerCase()) {
       case "approuvé":
-      case "approved":
         return "bg-green-100 text-green-800"
       case "en cours":
-      case "pending":
-      case "in_progress":
         return "bg-yellow-100 text-yellow-800"
       case "résolu":
-      case "completed":
-      case "resolved":
         return "bg-blue-100 text-blue-800"
       case "rejeté":
-      case "rejected":
         return "bg-red-100 text-red-800"
       default:
         return "bg-gray-100 text-gray-800"
@@ -227,9 +241,7 @@ export default function UserDashboard() {
           <AlertTriangle className="h-16 w-16 text-red-500 mx-auto mb-4" />
           <h2 className="text-xl font-semibold text-gray-900 mb-2">Erreur</h2>
           <p className="text-gray-600 mb-4">{error}</p>
-          <Button onClick={fetchUserData} variant="outline">
-            Réessayer
-          </Button>
+          <Button onClick={fetchUserData} variant="outline">Réessayer</Button>
         </div>
       </div>
     )
@@ -293,7 +305,7 @@ export default function UserDashboard() {
                   <div className="flex items-center justify-between">
                     <div>
                       <p className="text-sm font-medium text-gray-600">Téléphone actuel</p>
-                      <p className="text-2xl font-bold text-gray-900">{stats.currentPhone || "Aucun téléphone"}</p>
+                      <p className="text-2xl font-bold text-gray-900">{stats.currentPhone}</p>
                     </div>
                     <div className="p-3 bg-gradient-to-r from-blue-500 to-purple-600 rounded-xl">
                       <Smartphone className="h-6 w-6 text-white" />
@@ -470,13 +482,6 @@ export default function UserDashboard() {
                     </CardTitle>
                     <CardDescription>Historique de vos dernières demandes</CardDescription>
                   </div>
-                  <Button
-                    variant="outline"
-                    onClick={() => router.push("/user-dashboard/requests")}
-                    className="bg-white/50"
-                  >
-                    Voir tout
-                  </Button>
                 </div>
               </CardHeader>
               <CardContent>
@@ -484,8 +489,7 @@ export default function UserDashboard() {
                   {recentRequests.map((request) => (
                     <div
                       key={request.id}
-                      className="flex items-center justify-between p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors cursor-pointer"
-                      onClick={() => router.push(`/user-dashboard/requests?id=${request.id}`)}
+                      className="flex items-center justify-between p-4 bg-gray-50 rounded-lg"
                     >
                       <div className="flex items-center space-x-4">
                         <div className="p-2 bg-white rounded-lg shadow-sm">

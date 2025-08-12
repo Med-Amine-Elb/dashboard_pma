@@ -25,15 +25,37 @@ import {
   Settings,
   Download,
   RefreshCw,
-  Clock,
 } from "lucide-react"
 import { Sidebar } from "@/components/sidebar"
 import { NotificationsDropdown } from "@/components/notifications-dropdown"
 import { useRouter } from "next/navigation"
 import { UserManagementApi } from "@/api/generated"
-import { getApiConfig, getUserIdFromToken } from "@/lib/apiClient"
+import { getApiConfig } from "@/lib/apiClient"
 
 export default function MyPhonePage() {
+  interface DashboardResponse {
+    user: {
+      firstName?: string
+      lastName?: string
+      email?: string
+      profilePicture?: string
+      department?: string
+    }
+    phone?: {
+      model?: string
+      serialNumber?: string
+      imei?: string
+      assignedDate?: string
+      status?: string
+      batteryHealth?: number
+      storageUsed?: number
+      lastSync?: string
+      brand?: string
+      color?: string
+      storage?: string
+    } | null
+  }
+
   const [user, setUser] = useState({
     name: "",
     email: "",
@@ -62,19 +84,44 @@ export default function MyPhonePage() {
   })
 
   const [usageStats, setUsageStats] = useState({
-    callsThisMonth: 0,
-    smsThisMonth: 0,
-    dataUsedGB: 0,
-    dataLimitGB: 0,
-    averageCallDuration: "",
-    mostUsedApp: "",
-    screenTime: "",
+    callsThisMonth: 127,
+    smsThisMonth: 89,
+    dataUsedGB: 12.5,
+    dataLimitGB: 50,
+    averageCallDuration: "3m 45s",
+    mostUsedApp: "Teams",
+    screenTime: "6h 32m",
   })
 
-  const [maintenanceHistory, setMaintenanceHistory] = useState([])
+  const [maintenanceHistory, setMaintenanceHistory] = useState([
+    {
+      id: "MAINT-001",
+      date: "15 Nov 2024",
+      type: "Mise à jour logicielle",
+      description: "iOS 17.1.2 - Corrections de sécurité",
+      status: "Terminé",
+      technician: "Système automatique",
+    },
+    {
+      id: "MAINT-002",
+      date: "02 Nov 2024",
+      type: "Vérification",
+      description: "Contrôle de routine - État général",
+      status: "Terminé",
+      technician: "Jean Dupont",
+    },
+    {
+      id: "MAINT-003",
+      date: "20 Oct 2024",
+      type: "Configuration",
+      description: "Installation applications entreprise",
+      status: "Terminé",
+      technician: "Marie Martin",
+    },
+  ])
+
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-
   const router = useRouter()
 
   useEffect(() => {
@@ -86,106 +133,65 @@ export default function MyPhonePage() {
       return
     }
 
-    fetchPhoneData()
+    fetchData()
   }, [])
 
-  const fetchPhoneData = async () => {
+  const fetchData = async () => {
     setLoading(true)
     setError(null)
-    
     try {
       const token = localStorage.getItem("jwt_token")
-      const userId = getUserIdFromToken(token)
-      
-      if (!token || !userId) {
-        setError("Token invalide")
+      if (!token) {
+        setError("Jeton invalide ou utilisateur non connecté")
         return
       }
+      const api = new UserManagementApi(getApiConfig(token))
+      const res = await api.getMyDashboard()
+      const body: any = res.data
+      const data: DashboardResponse = body?.data
 
-      const userApi = new UserManagementApi(getApiConfig(token))
-      
-      // Fetch current user data
-      const userResponse = await userApi.getUserById(userId)
-      const userData = userResponse.data
-      
+      const u = data?.user || {}
       setUser({
-        name: `${userData.firstName || ""} ${userData.lastName || ""}`.trim(),
-        email: userData.email || "",
-        avatar: userData.profilePicture || "",
-        department: userData.department || "",
+        name: `${u.firstName || ""} ${u.lastName || ""}`.trim(),
+        email: String(u.email || ""),
+        avatar: String(u.profilePicture || ""),
+        department: String(u.department || ""),
       })
 
-      // Fetch user's phone data
-      const phoneResponse = await userApi.getUserPhone(userId)
-      const phoneData = phoneResponse.data
-      
-      if (phoneData) {
-        setPhoneDetails({
-          model: phoneData.model || "",
-          brand: phoneData.brand || "",
-          serialNumber: phoneData.serialNumber || "",
-          imei: phoneData.imei || "",
-          color: phoneData.color || "",
-          storage: phoneData.storage || "",
-          assignedDate: phoneData.assignedDate ? new Date(phoneData.assignedDate).toLocaleDateString("fr-FR", {
-            day: "numeric",
-            month: "long",
-            year: "numeric"
-          }) : "",
-          warrantyExpiry: phoneData.warrantyExpiry ? new Date(phoneData.warrantyExpiry).toLocaleDateString("fr-FR", {
-            day: "numeric",
-            month: "long",
-            year: "numeric"
-          }) : "",
-          status: phoneData.status || "",
-          condition: phoneData.condition || "",
-          lastUpdate: phoneData.lastUpdate ? new Date(phoneData.lastUpdate).toLocaleDateString("fr-FR", {
-            day: "numeric",
-            month: "short",
-            year: "numeric"
-          }) : "",
-          batteryHealth: phoneData.batteryHealth || 0,
-          storageUsed: phoneData.storageUsed || 0,
-          lastSync: phoneData.lastSync ? new Date(phoneData.lastSync).toLocaleString("fr-FR") : "",
-          osVersion: phoneData.osVersion || "",
-          carrier: phoneData.carrier || "",
-          phoneNumber: phoneData.phoneNumber || "",
-        })
-
-        // Set usage stats based on phone data
-        setUsageStats({
-          callsThisMonth: phoneData.callsThisMonth || 0,
-          smsThisMonth: phoneData.smsThisMonth || 0,
-          dataUsedGB: phoneData.dataUsedGB || 0,
-          dataLimitGB: phoneData.dataLimitGB || 0,
-          averageCallDuration: phoneData.averageCallDuration || "",
-          mostUsedApp: phoneData.mostUsedApp || "",
-          screenTime: phoneData.screenTime || "",
-        })
+      const p = data?.phone || null
+      if (p) {
+        setPhoneDetails((prev) => ({
+          ...prev,
+          model: p.model || "",
+          brand: p.brand || "",
+          serialNumber: p.serialNumber || "",
+          imei: p.imei || "",
+          color: p.color || "",
+          storage: p.storage || "",
+          assignedDate: p.assignedDate
+            ? new Date(p.assignedDate).toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" })
+            : "",
+          status: p.status || "",
+          batteryHealth: typeof p.batteryHealth === "number" ? p.batteryHealth : 0,
+          storageUsed: typeof p.storageUsed === "number" ? p.storageUsed : 0,
+          lastSync: p.lastSync ? new Date(p.lastSync).toLocaleString("fr-FR") : "",
+        }))
+      } else {
+        setPhoneDetails((prev) => ({
+          ...prev,
+          model: "",
+          brand: "",
+          serialNumber: "",
+          imei: "",
+          assignedDate: "",
+          status: "Non assigné",
+          batteryHealth: 0,
+          storageUsed: 0,
+          lastSync: "",
+        }))
       }
-
-      // Fetch maintenance history
-      const maintenanceResponse = await userApi.getUserMaintenanceHistory(userId)
-      const maintenanceData = maintenanceResponse.data || []
-      
-      const mappedMaintenance = maintenanceData.map((maintenance: any) => ({
-        id: maintenance.id || "",
-        date: maintenance.date ? new Date(maintenance.date).toLocaleDateString("fr-FR", {
-          day: "numeric",
-          month: "short",
-          year: "numeric"
-        }) : "",
-        type: maintenance.type || "",
-        description: maintenance.description || "",
-        status: maintenance.status || "",
-        technician: maintenance.technician || "",
-      }))
-
-      setMaintenanceHistory(mappedMaintenance)
-
-    } catch (err: any) {
-      console.error("Error fetching phone data:", err)
-      setError(err.response?.data?.message || "Erreur lors du chargement des données du téléphone")
+    } catch (e: any) {
+      setError(e?.response?.data?.message || "Erreur lors du chargement des données")
     } finally {
       setLoading(false)
     }
@@ -197,15 +203,19 @@ export default function MyPhonePage() {
   }
 
   const getStatusColor = (status: string) => {
-    switch (status.toLowerCase()) {
+    const s = (status || "").toLowerCase()
+    switch (s) {
       case "actif":
-      case "active":
+      case "assigned":
         return "bg-green-100 text-green-800"
-      case "inactif":
-      case "inactive":
-        return "bg-red-100 text-red-800"
       case "maintenance":
         return "bg-yellow-100 text-yellow-800"
+      case "inactif":
+      case "available":
+        return "bg-blue-100 text-blue-800"
+      case "lost":
+      case "damaged":
+        return "bg-red-100 text-red-800"
       default:
         return "bg-gray-100 text-gray-800"
     }
@@ -216,13 +226,10 @@ export default function MyPhonePage() {
       case "excellent":
         return "bg-green-100 text-green-800"
       case "bon":
-      case "good":
         return "bg-blue-100 text-blue-800"
       case "moyen":
-      case "fair":
         return "bg-yellow-100 text-yellow-800"
       case "mauvais":
-      case "poor":
         return "bg-red-100 text-red-800"
       default:
         return "bg-gray-100 text-gray-800"
@@ -231,44 +238,22 @@ export default function MyPhonePage() {
 
   const handleQuickAction = (action: string) => {
     switch (action) {
-      case "report-issue":
+      case "report":
         router.push("/user-dashboard/requests?action=report")
         break
-      case "request-replacement":
+      case "replacement":
         router.push("/user-dashboard/requests?action=replacement")
         break
       case "support":
         router.push("/user-dashboard/requests?action=support")
         break
+      case "sync":
+        // Simulate sync action
+        alert("Synchronisation en cours...")
+        break
       default:
         break
     }
-  }
-
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100 flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-blue-600 mx-auto"></div>
-          <p className="mt-4 text-gray-600">Chargement des données du téléphone...</p>
-        </div>
-      </div>
-    )
-  }
-
-  if (error) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100 flex items-center justify-center">
-        <div className="text-center">
-          <AlertTriangle className="h-16 w-16 text-red-500 mx-auto mb-4" />
-          <h2 className="text-xl font-semibold text-gray-900 mb-2">Erreur</h2>
-          <p className="text-gray-600 mb-4">{error}</p>
-          <Button onClick={fetchPhoneData} variant="outline">
-            Réessayer
-          </Button>
-        </div>
-      </div>
-    )
   }
 
   return (
@@ -281,8 +266,8 @@ export default function MyPhonePage() {
           <div className="bg-white/80 backdrop-blur-xl border-b border-gray-200 px-6 py-4">
             <div className="flex items-center justify-between">
               <div>
-                <h1 className="text-2xl font-bold text-gray-900">Mon Téléphone</h1>
-                <p className="text-gray-600">Détails de votre appareil</p>
+                <h1 className="text-2xl font-bold text-gray-900">Mon téléphone</h1>
+                <p className="text-gray-600">Détails et gestion de votre appareil</p>
               </div>
 
               <div className="flex items-center space-x-4">
@@ -324,77 +309,79 @@ export default function MyPhonePage() {
           <div className="p-6 space-y-6">
             {/* Phone Overview */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-              {/* Phone Details Card */}
               <Card className="lg:col-span-2 bg-white/90 backdrop-blur-xl border-0 shadow-xl">
                 <CardHeader>
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <CardTitle className="text-xl font-bold text-gray-900">
-                        {phoneDetails.model || "Aucun téléphone assigné"}
+                  <CardTitle className="flex items-center space-x-2">
+                    <Smartphone className="h-5 w-5 text-blue-500" />
+                    <span>Informations générales</span>
                   </CardTitle>
-                      <CardDescription className="text-gray-600">
-                        {phoneDetails.brand} • {phoneDetails.color}
-                      </CardDescription>
-                    </div>
-                    <Badge className={getStatusColor(phoneDetails.status)}>
-                      {phoneDetails.status}
-                    </Badge>
-                  </div>
+                  <CardDescription>Détails de votre appareil</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-6">
-                  {/* Phone Image and Basic Info */}
-                  <div className="flex items-start space-x-6">
-                    <div className="flex-shrink-0">
-                      <div className="w-32 h-32 bg-gradient-to-br from-blue-500 to-purple-600 rounded-2xl flex items-center justify-center">
-                        <Smartphone className="h-16 w-16 text-white" />
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="space-y-4">
+                      <div>
+                        <p className="text-sm font-medium text-gray-600">Modèle</p>
+                        <p className="text-lg font-semibold text-gray-900">{phoneDetails.model}</p>
+                      </div>
+                      <div>
+                        <p className="text-sm font-medium text-gray-600">Marque</p>
+                        <p className="text-gray-900">{phoneDetails.brand}</p>
+                      </div>
+                      <div>
+                        <p className="text-sm font-medium text-gray-600">Couleur</p>
+                        <p className="text-gray-900">{phoneDetails.color}</p>
+                      </div>
+                      <div>
+                        <p className="text-sm font-medium text-gray-600">Stockage</p>
+                        <p className="text-gray-900">{phoneDetails.storage}</p>
+                      </div>
+                      <div>
+                        <p className="text-sm font-medium text-gray-600">Numéro de téléphone</p>
+                        <p className="text-gray-900">{phoneDetails.phoneNumber}</p>
                       </div>
                     </div>
-                    <div className="flex-1 space-y-4">
-                      <div className="grid grid-cols-2 gap-4">
+
+                    <div className="space-y-4">
                       <div>
                         <p className="text-sm font-medium text-gray-600">Numéro de série</p>
-                          <p className="text-sm text-gray-900">{phoneDetails.serialNumber || "N/A"}</p>
+                        <p className="text-gray-900 font-mono">{phoneDetails.serialNumber}</p>
                       </div>
                       <div>
                         <p className="text-sm font-medium text-gray-600">IMEI</p>
-                          <p className="text-sm text-gray-900">{phoneDetails.imei || "N/A"}</p>
+                        <p className="text-gray-900 font-mono">{phoneDetails.imei}</p>
                       </div>
                       <div>
-                          <p className="text-sm font-medium text-gray-600">Stockage</p>
-                          <p className="text-sm text-gray-900">{phoneDetails.storage || "N/A"}</p>
+                        <p className="text-sm font-medium text-gray-600">Version iOS</p>
+                        <p className="text-gray-900">{phoneDetails.osVersion}</p>
                       </div>
                       <div>
-                          <p className="text-sm font-medium text-gray-600">Date d'assignation</p>
-                          <p className="text-sm text-gray-900">{phoneDetails.assignedDate || "N/A"}</p>
+                        <p className="text-sm font-medium text-gray-600">Opérateur</p>
+                        <p className="text-gray-900">{phoneDetails.carrier}</p>
                       </div>
+                      <div>
+                        <p className="text-sm font-medium text-gray-600">Date d'attribution</p>
+                        <p className="text-gray-900">{phoneDetails.assignedDate}</p>
                       </div>
                     </div>
                   </div>
 
-                  {/* Status Indicators */}
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div className="flex items-center space-x-3 p-3 bg-gray-50 rounded-lg">
-                      <Battery className="h-5 w-5 text-green-600" />
+                  <Separator />
+
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center space-x-4">
                       <div>
-                        <p className="text-sm font-medium text-gray-900">Batterie</p>
-                        <p className="text-sm text-gray-600">{phoneDetails.batteryHealth}%</p>
+                        <p className="text-sm font-medium text-gray-600">Statut</p>
+                        <Badge className={getStatusColor(phoneDetails.status)}>{phoneDetails.status}</Badge>
+                      </div>
+                      <div>
+                        <p className="text-sm font-medium text-gray-600">État</p>
+                        <Badge className={getConditionColor(phoneDetails.condition)}>{phoneDetails.condition}</Badge>
                       </div>
                     </div>
-                    <div className="flex items-center space-x-3 p-3 bg-gray-50 rounded-lg">
-                      <HardDrive className="h-5 w-5 text-blue-600" />
-                      <div>
-                        <p className="text-sm font-medium text-gray-900">Stockage</p>
-                        <p className="text-sm text-gray-600">{phoneDetails.storageUsed}% utilisé</p>
-                      </div>
-                    </div>
-                    <div className="flex items-center space-x-3 p-3 bg-gray-50 rounded-lg">
-                      <Shield className="h-5 w-5 text-purple-600" />
-                      <div>
-                        <p className="text-sm font-medium text-gray-900">État</p>
-                        <Badge className={getConditionColor(phoneDetails.condition)}>
-                          {phoneDetails.condition}
-                        </Badge>
-                      </div>
+                    <div className="text-right">
+                      <p className="text-sm font-medium text-gray-600">Garantie expire le</p>
+                      <p className="text-gray-900">{phoneDetails.warrantyExpiry}</p>
                     </div>
                   </div>
                 </CardContent>
@@ -403,33 +390,114 @@ export default function MyPhonePage() {
               {/* Quick Actions */}
               <Card className="bg-white/90 backdrop-blur-xl border-0 shadow-xl">
                 <CardHeader>
-                  <CardTitle className="text-lg font-semibold text-gray-900">Actions rapides</CardTitle>
+                  <CardTitle className="flex items-center space-x-2">
+                    <Settings className="h-5 w-5 text-purple-500" />
+                    <span>Actions rapides</span>
+                  </CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-3">
                   <Button
-                    onClick={() => handleQuickAction("report-issue")}
-                    className="w-full justify-start"
                     variant="outline"
+                    className="w-full justify-start bg-red-50 hover:bg-red-100 border-red-200"
+                    onClick={() => handleQuickAction("report")}
                   >
-                    <AlertTriangle className="h-4 w-4 mr-2" />
+                    <AlertTriangle className="h-4 w-4 mr-2 text-red-600" />
                     Signaler un problème
                   </Button>
+
                   <Button
-                    onClick={() => handleQuickAction("request-replacement")}
-                    className="w-full justify-start"
                     variant="outline"
+                    className="w-full justify-start bg-blue-50 hover:bg-blue-100 border-blue-200"
+                    onClick={() => handleQuickAction("replacement")}
                   >
-                    <Phone className="h-4 w-4 mr-2" />
-                    Demander un remplacement
+                    <Phone className="h-4 w-4 mr-2 text-blue-600" />
+                    Demander remplacement
                   </Button>
+
                   <Button
-                    onClick={() => handleQuickAction("support")}
-                    className="w-full justify-start"
                     variant="outline"
+                    className="w-full justify-start bg-green-50 hover:bg-green-100 border-green-200"
+                    onClick={() => handleQuickAction("support")}
                   >
-                    <MessageSquare className="h-4 w-4 mr-2" />
+                    <MessageSquare className="h-4 w-4 mr-2 text-green-600" />
                     Contacter le support
                   </Button>
+
+                  <Button
+                    variant="outline"
+                    className="w-full justify-start bg-purple-50 hover:bg-purple-100 border-purple-200"
+                    onClick={() => handleQuickAction("sync")}
+                  >
+                    <RefreshCw className="h-4 w-4 mr-2 text-purple-600" />
+                    Synchroniser
+                  </Button>
+
+                  <Separator />
+
+                  <div className="text-center text-sm text-gray-500">
+                    <p>Dernière synchronisation</p>
+                    <p className="font-medium">{phoneDetails.lastSync}</p>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* System Status */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <Card className="bg-white/90 backdrop-blur-xl border-0 shadow-xl">
+                <CardHeader>
+                  <CardTitle className="flex items-center space-x-2">
+                    <Battery className="h-5 w-5 text-green-500" />
+                    <span>Batterie</span>
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-gray-600">Santé de la batterie</span>
+                    <span className="font-semibold">{phoneDetails.batteryHealth}%</span>
+                  </div>
+                  <Progress value={phoneDetails.batteryHealth} className="h-2" />
+                  <p className="text-xs text-gray-500">État: Excellent</p>
+                </CardContent>
+              </Card>
+
+              <Card className="bg-white/90 backdrop-blur-xl border-0 shadow-xl">
+                <CardHeader>
+                  <CardTitle className="flex items-center space-x-2">
+                    <HardDrive className="h-5 w-5 text-blue-500" />
+                    <span>Stockage</span>
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-gray-600">Utilisé</span>
+                    <span className="font-semibold">{phoneDetails.storageUsed}%</span>
+                  </div>
+                  <Progress value={phoneDetails.storageUsed} className="h-2" />
+                  <p className="text-xs text-gray-500">
+                    {Math.round((phoneDetails.storageUsed / 100) * Number.parseInt(phoneDetails.storage))} GB sur{" "}
+                    {phoneDetails.storage}
+                  </p>
+                </CardContent>
+              </Card>
+
+              <Card className="bg-white/90 backdrop-blur-xl border-0 shadow-xl">
+                <CardHeader>
+                  <CardTitle className="flex items-center space-x-2">
+                    <Shield className="h-5 w-5 text-purple-500" />
+                    <span>Sécurité</span>
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-gray-600">Chiffrement</span>
+                    <CheckCircle className="h-4 w-4 text-green-500" />
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-gray-600">Verrouillage</span>
+                    <CheckCircle className="h-4 w-4 text-green-500" />
+                  </div>
+                  <p className="text-xs text-gray-500">Toutes les protections actives</p>
                 </CardContent>
               </Card>
             </div>
@@ -437,52 +505,41 @@ export default function MyPhonePage() {
             {/* Usage Statistics */}
             <Card className="bg-white/90 backdrop-blur-xl border-0 shadow-xl">
               <CardHeader>
-                <CardTitle className="text-xl font-bold text-gray-900">Statistiques d'utilisation</CardTitle>
+                <CardTitle className="flex items-center space-x-2">
+                  <Signal className="h-5 w-5 text-orange-500" />
+                  <span>Statistiques d'utilisation</span>
+                </CardTitle>
+                <CardDescription>Utilisation ce mois-ci</CardDescription>
               </CardHeader>
               <CardContent>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                  <div className="text-center">
-                    <div className="p-3 bg-blue-100 rounded-full w-16 h-16 flex items-center justify-center mx-auto mb-3">
-                      <Phone className="h-8 w-8 text-blue-600" />
-                    </div>
+                  <div className="text-center p-4 bg-blue-50 rounded-lg">
+                    <Phone className="h-8 w-8 text-blue-500 mx-auto mb-2" />
                     <p className="text-2xl font-bold text-gray-900">{usageStats.callsThisMonth}</p>
-                    <p className="text-sm text-gray-600">Appels ce mois</p>
+                    <p className="text-sm text-gray-600">Appels</p>
+                    <p className="text-xs text-gray-500">Durée moy: {usageStats.averageCallDuration}</p>
                   </div>
-                  <div className="text-center">
-                    <div className="p-3 bg-green-100 rounded-full w-16 h-16 flex items-center justify-center mx-auto mb-3">
-                      <MessageSquare className="h-8 w-8 text-green-600" />
-                    </div>
-                    <p className="text-2xl font-bold text-gray-900">{usageStats.smsThisMonth}</p>
-                    <p className="text-sm text-gray-600">SMS ce mois</p>
-                  </div>
-                  <div className="text-center">
-                    <div className="p-3 bg-purple-100 rounded-full w-16 h-16 flex items-center justify-center mx-auto mb-3">
-                      <Wifi className="h-8 w-8 text-purple-600" />
-                    </div>
-                    <p className="text-2xl font-bold text-gray-900">{usageStats.dataUsedGB} GB</p>
-                    <p className="text-sm text-gray-600">Données utilisées</p>
-                  </div>
-                  <div className="text-center">
-                    <div className="p-3 bg-orange-100 rounded-full w-16 h-16 flex items-center justify-center mx-auto mb-3">
-                      <Clock className="h-8 w-8 text-orange-600" />
-                    </div>
-                    <p className="text-2xl font-bold text-gray-900">{usageStats.averageCallDuration}</p>
-                    <p className="text-sm text-gray-600">Durée moyenne</p>
-                  </div>
-                </div>
 
-                {/* Data Usage Progress */}
-                <div className="mt-6">
-                  <div className="flex justify-between items-center mb-2">
-                    <span className="text-sm font-medium text-gray-700">Utilisation des données</span>
-                    <span className="text-sm text-gray-600">
-                      {usageStats.dataUsedGB} GB / {usageStats.dataLimitGB} GB
-                    </span>
+                  <div className="text-center p-4 bg-green-50 rounded-lg">
+                    <MessageSquare className="h-8 w-8 text-green-500 mx-auto mb-2" />
+                    <p className="text-2xl font-bold text-gray-900">{usageStats.smsThisMonth}</p>
+                    <p className="text-sm text-gray-600">SMS</p>
+                    <p className="text-xs text-gray-500">Messages envoyés</p>
                   </div>
-                  <Progress
-                    value={(usageStats.dataUsedGB / usageStats.dataLimitGB) * 100}
-                    className="h-2"
-                  />
+
+                  <div className="text-center p-4 bg-purple-50 rounded-lg">
+                    <Wifi className="h-8 w-8 text-purple-500 mx-auto mb-2" />
+                    <p className="text-2xl font-bold text-gray-900">{usageStats.dataUsedGB} GB</p>
+                    <p className="text-sm text-gray-600">Données</p>
+                    <p className="text-xs text-gray-500">sur {usageStats.dataLimitGB} GB</p>
+                  </div>
+
+                  <div className="text-center p-4 bg-orange-50 rounded-lg">
+                    <Settings className="h-8 w-8 text-orange-500 mx-auto mb-2" />
+                    <p className="text-2xl font-bold text-gray-900">{usageStats.screenTime}</p>
+                    <p className="text-sm text-gray-600">Temps d'écran</p>
+                    <p className="text-xs text-gray-500">App: {usageStats.mostUsedApp}</p>
+                  </div>
                 </div>
               </CardContent>
             </Card>
@@ -490,39 +547,39 @@ export default function MyPhonePage() {
             {/* Maintenance History */}
             <Card className="bg-white/90 backdrop-blur-xl border-0 shadow-xl">
               <CardHeader>
-                <CardTitle className="text-xl font-bold text-gray-900">Historique de maintenance</CardTitle>
+                <CardTitle className="flex items-center space-x-2">
+                  <Calendar className="h-5 w-5 text-indigo-500" />
+                  <span>Historique de maintenance</span>
+                </CardTitle>
+                <CardDescription>Interventions et mises à jour récentes</CardDescription>
               </CardHeader>
               <CardContent>
                 <div className="space-y-4">
-                  {maintenanceHistory.length > 0 ? (
-                    maintenanceHistory.map((maintenance) => (
+                  {maintenanceHistory.map((maintenance) => (
                     <div
                       key={maintenance.id}
-                        className="flex items-center justify-between p-4 bg-gray-50 rounded-lg"
+                      className="flex items-center justify-between p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors"
                     >
                       <div className="flex items-center space-x-4">
-                          <div className="p-2 bg-blue-100 rounded-full">
-                            <Settings className="h-4 w-4 text-blue-600" />
+                        <div className="p-2 bg-white rounded-lg shadow-sm">
+                          {maintenance.type === "Mise à jour logicielle" && (
+                            <Download className="h-4 w-4 text-blue-500" />
+                          )}
+                          {maintenance.type === "Vérification" && <CheckCircle className="h-4 w-4 text-green-500" />}
+                          {maintenance.type === "Configuration" && <Settings className="h-4 w-4 text-purple-500" />}
                         </div>
                         <div>
                           <p className="font-medium text-gray-900">{maintenance.type}</p>
                           <p className="text-sm text-gray-600">{maintenance.description}</p>
-                            <p className="text-xs text-gray-500">
-                              {maintenance.date} • {maintenance.technician}
-                            </p>
-                          </div>
+                          <p className="text-xs text-gray-500">Par: {maintenance.technician}</p>
                         </div>
-                        <Badge className={getStatusColor(maintenance.status)}>
-                          {maintenance.status}
-                        </Badge>
                       </div>
-                    ))
-                  ) : (
-                    <div className="text-center py-8">
-                      <Settings className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                      <p className="text-gray-600">Aucun historique de maintenance disponible</p>
+                      <div className="text-right">
+                        <p className="text-sm font-medium text-gray-900">{maintenance.date}</p>
+                        <Badge className="bg-green-100 text-green-800">{maintenance.status}</Badge>
+                      </div>
                     </div>
-                  )}
+                  ))}
                 </div>
               </CardContent>
             </Card>

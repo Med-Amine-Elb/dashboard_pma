@@ -65,7 +65,7 @@ export function Sidebar({ activeItem, onLogout }: SidebarProps) {
       return [
         { id: "dashboard", label: "Dashboard", icon: LayoutDashboard, href: "/user-dashboard" },
         { id: "my-phone", label: "Mon Téléphone", icon: Phone, href: "/user-dashboard/my-phone" },
-        { id: "requests", label: "Mes Demandes", icon: MessageSquare, href: "/user-dashboard/requests" },
+        // Requests link removed for user role
       ]
     }
   }
