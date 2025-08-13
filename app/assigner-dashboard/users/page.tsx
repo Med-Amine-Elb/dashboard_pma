@@ -14,6 +14,7 @@ import { UserManagementApi } from "@/api/generated/apis/user-management-api"
 import { AttributionManagementApi } from "@/api/generated/apis/attribution-management-api"
 import { SIMCardManagementApi } from "@/api/generated/apis/simcard-management-api"
 import { getApiConfig } from "@/lib/apiClient"
+import { useUser } from "@/contexts/UserContext"
 import { UserDto } from "@/api/generated/models"
 
 interface AssignerUser {
@@ -38,7 +39,8 @@ interface PaginationInfo {
 }
 
 export default function AssignerUsersPage() {
-  const [user, setUser] = useState({ name: "Randy Riley", email: "randy.riley@company.com", avatar: "" })
+  const { userData } = useUser()
+  const [user, setUser] = useState({ name: "", email: "", avatar: "" })
   const [users, setUsers] = useState<AssignerUser[]>([])
   const [filteredUsers, setFilteredUsers] = useState<AssignerUser[]>([])
   const [searchTerm, setSearchTerm] = useState("")
@@ -63,8 +65,15 @@ export default function AssignerUsersPage() {
       return
     }
 
+    // Update user data from context
+    setUser({
+      name: userData.name || "Assigner",
+      email: userData.email || "",
+      avatar: userData.avatar || "",
+    })
+
     fetchUsers()
-  }, [pagination.page, pagination.limit, statusFilter, searchTerm])
+  }, [pagination.page, pagination.limit, statusFilter, searchTerm, userData])
 
   // Refresh data when page becomes visible
   useEffect(() => {

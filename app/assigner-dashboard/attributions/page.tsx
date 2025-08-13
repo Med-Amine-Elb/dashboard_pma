@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Avatar, AvatarFallback } from "@/components/ui/avatar"
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { useToast } from "@/hooks/use-toast"
 import { Toaster } from "@/components/ui/toaster"
 import { AttributionModal } from "@/components/attribution-modal"
@@ -26,12 +26,15 @@ import {
   Calendar,
   ChevronLeft,
   ChevronRight,
+  Globe,
+  Bell,
 } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { AttributionManagementApi } from "@/api/generated/apis/attribution-management-api"
 import { SIMCardManagementApi } from "@/api/generated/apis/simcard-management-api"
 import { UserManagementApi } from "@/api/generated/apis/user-management-api"
 import { getApiConfig } from "@/lib/apiClient"
+import { useUser } from "@/contexts/UserContext"
 import { AttributionDto } from "@/api/generated/models"
 import axios from "axios"
 
@@ -59,6 +62,7 @@ interface PaginationInfo {
 }
 
 export default function AssignerAttributionsPage() {
+  const { userData } = useUser()
   const [attributions, setAttributions] = useState<Attribution[]>([])
   const [filteredAttributions, setFilteredAttributions] = useState<Attribution[]>([])
   const [searchTerm, setSearchTerm] = useState("")
@@ -84,7 +88,7 @@ export default function AssignerAttributionsPage() {
       return
     }
     fetchAttributions()
-  }, [router, pagination.page, pagination.limit, statusFilter, searchTerm])
+  }, [router, pagination.page, pagination.limit, statusFilter, searchTerm, userData])
 
   const fetchAttributions = async () => {
     setLoading(true)
@@ -505,8 +509,54 @@ export default function AssignerAttributionsPage() {
       <Sidebar activeItem="attributions" onLogout={handleLogout} />
 
       <div className="flex-1 ml-64">
+        {/* Header Bar */}
+        <div className="bg-white/80 backdrop-blur-xl border-b border-gray-200 px-6 py-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-2xl font-bold text-gray-900">Attributions</h1>
+              <p className="text-gray-600">Gérez les attributions de téléphones et cartes SIM</p>
+            </div>
+
+            <div className="flex items-center space-x-4">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                <Input
+                  placeholder="Rechercher..."
+                  className="pl-10 w-80 bg-white/50 border-gray-200 focus:border-blue-500"
+                />
+              </div>
+
+              <Button variant="outline" size="sm" className="bg-white/50">
+                <Globe className="h-4 w-4 mr-2" />
+                FR
+              </Button>
+
+              <Button variant="outline" size="sm" className="bg-white/50 relative">
+                <Bell className="h-4 w-4" />
+                <span className="absolute -top-1 -right-1 h-3 w-3 bg-red-500 rounded-full"></span>
+              </Button>
+
+              <div className="flex items-center space-x-3">
+                <Avatar className="h-8 w-8">
+                  <AvatarImage src={userData.avatar || "/placeholder.svg"} />
+                  <AvatarFallback className="bg-gradient-to-r from-blue-500 to-purple-600 text-white">
+                    {userData.name
+                      .split(" ")
+                      .map((n) => n[0])
+                      .join("")}
+                  </AvatarFallback>
+                </Avatar>
+                <div className="hidden md:block">
+                  <p className="text-sm font-medium text-gray-900">{userData.name || "Assigner"}</p>
+                  <p className="text-xs text-gray-500">{userData.email || "assigner@company.com"}</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
         <div className="p-8">
-          {/* Header */}
+          {/* Page Content Header */}
           <div className="flex items-center justify-between mb-8">
             <div>
               <h1 className="text-3xl font-bold text-gray-900">Attributions</h1>

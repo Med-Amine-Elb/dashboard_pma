@@ -4,7 +4,7 @@ import { useState, useEffect } from "react"
 import { Sidebar } from "@/components/sidebar"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Avatar, AvatarFallback } from "@/components/ui/avatar"
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Input } from "@/components/ui/input"
 import { useToast } from "@/hooks/use-toast"
 import { Toaster } from "@/components/ui/toaster"
@@ -37,12 +37,15 @@ import {
   Smartphone,
   Activity,
   RefreshCw,
+  Globe,
+  Bell,
 } from "lucide-react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
 import dynamic from "next/dynamic"
 import { AttributionManagementApi, UserManagementApi, PhoneManagementApi, SIMCardManagementApi } from "@/api/generated"
 import { getApiConfig } from "@/lib/apiClient"
+import { useUser } from "@/contexts/UserContext"
 
 // Dynamically import ECharts components to avoid SSR issues
 const ReactECharts = dynamic(() => import("echarts-for-react"), { ssr: false })
@@ -69,6 +72,7 @@ interface DashboardStats {
 }
 
 export default function AssignerDashboard() {
+  const { userData } = useUser()
   const [showAttributionModal, setShowAttributionModal] = useState(false)
   const [showProjectDetails, setShowProjectDetails] = useState(false)
   const [showInviteModal, setShowInviteModal] = useState(false)
@@ -100,7 +104,7 @@ export default function AssignerDashboard() {
       return
     }
     fetchDashboardData()
-  }, [router])
+  }, [userData, router])
 
   const fetchDashboardData = async () => {
     setLoading(true)
@@ -485,10 +489,56 @@ export default function AssignerDashboard() {
     <div className="flex min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100">
       <Sidebar activeItem="board" onLogout={handleLogout} />
 
-      <div className="flex-1 ml-64">
-        <div className="p-8">
-          {/* Header */}
-          <div className="flex items-center justify-between mb-8">
+             <div className="flex-1 ml-64">
+         {/* Header Bar */}
+         <div className="bg-white/80 backdrop-blur-xl border-b border-gray-200 px-6 py-4">
+           <div className="flex items-center justify-between">
+             <div>
+               <h1 className="text-2xl font-bold text-gray-900">Dashboard Assignateur</h1>
+               <p className="text-gray-600">Gérez vos attributions et suivez les performances</p>
+             </div>
+
+             <div className="flex items-center space-x-4">
+               <div className="relative">
+                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                 <Input
+                   placeholder="Rechercher..."
+                   className="pl-10 w-80 bg-white/50 border-gray-200 focus:border-blue-500"
+                 />
+               </div>
+
+               <Button variant="outline" size="sm" className="bg-white/50">
+                 <Globe className="h-4 w-4 mr-2" />
+                 FR
+               </Button>
+
+               <Button variant="outline" size="sm" className="bg-white/50 relative">
+                 <Bell className="h-4 w-4" />
+                 <span className="absolute -top-1 -right-1 h-3 w-3 bg-red-500 rounded-full"></span>
+               </Button>
+
+               <div className="flex items-center space-x-3">
+                 <Avatar className="h-8 w-8">
+                   <AvatarImage src={userData.avatar || "/placeholder.svg"} />
+                   <AvatarFallback className="bg-gradient-to-r from-blue-500 to-purple-600 text-white">
+                     {userData.name
+                       .split(" ")
+                       .map((n) => n[0])
+                       .join("")}
+                   </AvatarFallback>
+                 </Avatar>
+                 <div className="hidden md:block">
+                   <p className="text-sm font-medium text-gray-900">{userData.name || "Assigner"}</p>
+                   <p className="text-xs text-gray-500">{userData.email || "assigner@company.com"}</p>
+                 </div>
+               </div>
+             </div>
+           </div>
+         </div>
+
+         <div className="p-8">
+           {/* Dashboard Content Header */}
+           <div className="flex items-center justify-between mb-8">
             <div>
               <h1 className="text-3xl font-bold text-gray-900">Dashboard Assignateur</h1>
               <p className="text-gray-600 mt-2">Gérez vos attributions et suivez les performances</p>

@@ -12,6 +12,7 @@ import { DataTable } from "@/components/data-table"
 import { useToast } from "@/hooks/use-toast"
 import { PhoneManagementApi } from "@/api/generated/apis/phone-management-api"
 import { getApiConfig } from "@/lib/apiClient"
+import { useUser } from "@/contexts/UserContext"
 import { PhoneDto } from "@/api/generated/models"
 
 interface PhoneDevice {
@@ -40,7 +41,8 @@ interface PaginationInfo {
 }
 
 export default function AssignerPhonesPage() {
-  const [user, setUser] = useState({ name: "Randy Riley", email: "randy.riley@company.com", avatar: "" })
+  const { userData } = useUser()
+  const [user, setUser] = useState({ name: "", email: "", avatar: "" })
   const [phones, setPhones] = useState<PhoneDevice[]>([])
   const [filteredPhones, setFilteredPhones] = useState<PhoneDevice[]>([])
   const [searchTerm, setSearchTerm] = useState("")
@@ -65,8 +67,15 @@ export default function AssignerPhonesPage() {
       return
     }
 
+    // Update user data from context
+    setUser({
+      name: userData.name || "Assigner",
+      email: userData.email || "",
+      avatar: userData.avatar || "",
+    })
+
     fetchPhones()
-  }, [pagination.page, pagination.limit, statusFilter, searchTerm])
+  }, [pagination.page, pagination.limit, statusFilter, searchTerm, userData])
 
   const fetchPhones = async () => {
     setLoading(true)

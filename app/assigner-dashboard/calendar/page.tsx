@@ -10,6 +10,7 @@ import { Search, Bell, Globe, Plus, CalendarIcon, Clock, Users, Phone, ChevronLe
 import { Sidebar } from "@/components/sidebar"
 import { EventModal } from "@/components/event-modal"
 import { useToast } from "@/hooks/use-toast"
+import { useUser } from "@/contexts/UserContext"
 
 interface Event {
   id: string
@@ -24,7 +25,8 @@ interface Event {
 }
 
 export default function AssignerCalendarPage() {
-  const [user, setUser] = useState({ name: "Randy Riley", email: "randy.riley@company.com", avatar: "" })
+  const { userData } = useUser()
+  const [user, setUser] = useState({ name: "", email: "", avatar: "" })
   const [events, setEvents] = useState<Event[]>([])
   const [currentDate, setCurrentDate] = useState(new Date())
   const [selectedDate, setSelectedDate] = useState<Date | null>(null)
@@ -42,8 +44,15 @@ export default function AssignerCalendarPage() {
       return
     }
 
+    // Update user data from context
+    setUser({
+      name: userData.name || "Assigner",
+      email: userData.email || "",
+      avatar: userData.avatar || "",
+    })
+
     loadEvents()
-  }, [])
+  }, [userData])
 
   const loadEvents = () => {
     const mockEvents: Event[] = [

@@ -7,12 +7,14 @@ import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Search, Bell, Plus, Download, Edit, Trash2, Globe } from "lucide-react"
+import { Pagination, PaginationContent, PaginationItem, PaginationLink, PaginationNext, PaginationPrevious } from "@/components/ui/pagination"
 import { Sidebar } from "@/components/sidebar"
 import { DataTable } from "@/components/data-table"
 import { PhoneModal } from "@/components/phone-modal"
 import { useToast } from "@/hooks/use-toast"
 import { PhoneManagementApi } from "@/api/generated";
 import { getApiConfig } from "@/lib/apiClient";
+import { useUser } from "@/contexts/UserContext";
 
 interface PhoneData {
   id: string
@@ -47,7 +49,8 @@ interface PhoneDtoCustom {
 }
 
 export default function PhonesPage() {
-  const [user, setUser] = useState({ name: "Randy Riley", email: "randy.riley@company.com", avatar: "" })
+  const { userData } = useUser()
+  const [user, setUser] = useState({ name: "", email: "", avatar: "" })
   const [phones, setPhones] = useState<PhoneData[]>([])
   const [filteredPhones, setFilteredPhones] = useState<PhoneData[]>([])
   const [searchTerm, setSearchTerm] = useState("")
@@ -59,6 +62,20 @@ export default function PhonesPage() {
   const { toast } = useToast()
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [page, setPage] = useState(1)
+  const [limit, setLimit] = useState(10)
+  const [total, setTotal] = useState(0)
+  const [totalPages, setTotalPages] = useState(0)
+
+  const getPageNumbers = () => {
+    const pages: number[] = []
+    const maxToShow = 5
+    let start = Math.max(1, page - 2)
+    let end = Math.min(totalPages, start + maxToShow - 1)
+    if (end - start < maxToShow - 1) start = Math.max(1, end - maxToShow + 1)
+    for (let p = start; p <= end; p++) pages.push(p)
+    return pages
+  }
 
   useEffect(() => {
     // Check authentication
@@ -70,8 +87,15 @@ export default function PhonesPage() {
       return
     }
 
+    // Update user data from context
+    setUser({
+      name: userData.name || "Admin",
+      email: userData.email || "",
+      avatar: userData.avatar || "",
+    })
+
     fetchPhones()
-  }, [])
+  }, [page, limit, statusFilter, userData])
 
   useEffect(() => {
     filterPhones()
@@ -103,29 +127,26 @@ export default function PhonesPage() {
       console.log("API config:", getApiConfig(token))
       console.log("Fetching phones...")
       
-      const res = await api.getPhones()
+      const res = await api.getPhones(page, limit, undefined, undefined, undefined)
       console.log("API Response:", res)
       console.log("Response data:", res.data)
       console.log("Response status:", res.status)
       
-      // Correctly extract phones from backend response
-      let apiPhones: any[] = [];
-      if (Array.isArray(res.data)) {
-        apiPhones = res.data;
-      } else if (
-        res.data &&
-        typeof res.data === 'object' &&
-        res.data.data &&
-        typeof res.data.data === 'object' &&
-        Array.isArray((res.data.data as any).phones)
-      ) {
-        apiPhones = (res.data.data as any).phones;
-      } else if (
-        res.data &&
-        typeof res.data === 'object' &&
-        Array.isArray((res.data as any).phones)
-      ) {
-        apiPhones = (res.data as any).phones;
+      // Extract phones + pagination
+      let apiPhones: any[] = []
+      let meta: any = {}
+      const body: any = res.data
+      if (Array.isArray(body)) {
+        apiPhones = body
+      } else if (body?.data?.phones) {
+        apiPhones = body.data.phones
+        meta = body.data.pagination || {}
+      } else if (body?.phones) {
+        apiPhones = body.phones
+        meta = body.pagination || {}
+      } else if (body?.content) {
+        apiPhones = body.content
+        meta = { page: (body.pageable?.pageNumber ?? 0) + 1, limit: body.size, total: body.totalElements, totalPages: body.totalPages }
       }
       
       console.log("Processed phones:", apiPhones)
@@ -151,6 +172,10 @@ export default function PhonesPage() {
       
       console.log("Mapped phones:", mappedPhones)
       setPhones(mappedPhones)
+      if (meta) {
+        setTotal(meta.total ?? mappedPhones.length)
+        setTotalPages(meta.totalPages ?? Math.ceil((meta.total ?? mappedPhones.length)/limit))
+      }
       
     } catch (err: any) {
       console.error("Error fetching phones:", err)
@@ -564,6 +589,7 @@ export default function PhonesPage() {
                 ) : error ? (
                   <div className="py-8 text-center text-red-500">{error}</div>
                 ) : (
+                <>
                 <DataTable
                   data={filteredPhones}
                   columns={phoneColumns}
@@ -603,7 +629,29 @@ export default function PhonesPage() {
                     }
                     return phone[key as keyof PhoneData] || "-"
                   }}
+                useExternalPagination
                 />
+                {/* Pagination */}
+                {totalPages > 1 && (
+                  <Pagination className="justify-end mt-4">
+                    <PaginationContent>
+                      <PaginationItem>
+                        <PaginationPrevious href="#" onClick={(e)=>{e.preventDefault(); setPage((p)=>Math.max(1,p-1))}} />
+                      </PaginationItem>
+                      {getPageNumbers().map((p) => (
+                        <PaginationItem key={p}>
+                          <PaginationLink href="#" isActive={p===page} onClick={(e)=>{e.preventDefault(); setPage(p)}}>
+                            {p}
+                          </PaginationLink>
+                        </PaginationItem>
+                      ))}
+                      <PaginationItem>
+                        <PaginationNext href="#" onClick={(e)=>{e.preventDefault(); setPage((p)=>Math.min(totalPages,p+1))}} />
+                      </PaginationItem>
+                    </PaginationContent>
+                  </Pagination>
+                )}
+                </>
                 )}
               </CardContent>
             </Card>

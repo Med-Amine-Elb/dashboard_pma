@@ -12,13 +12,15 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Search, Bell, Globe, Settings, Shield, Key, Eye, Lock, Download, Trash2, AlertTriangle } from "lucide-react"
 import { Sidebar } from "@/components/sidebar"
 import { useToast } from "@/hooks/use-toast"
+import { useUser } from "@/contexts/UserContext"
 
 export default function SettingsPage() {
+  const { userData } = useUser()
   const [user, setUser] = useState({
-    name: "Randy Riley",
-    email: "randy.riley@company.com",
+    name: "",
+    email: "",
     avatar: "",
-    department: "IT Department",
+    department: "",
   })
 
   const [settings, setSettings] = useState({
@@ -60,7 +62,15 @@ export default function SettingsPage() {
       window.location.href = "/"
       return
     }
-  }, [])
+
+    // Update user data from context
+    setUser({
+      name: userData.name || "",
+      email: userData.email || "",
+      avatar: userData.avatar || "",
+      department: userData.department || "",
+    })
+  }, [userData])
 
   const handleLogout = () => {
     localStorage.clear()

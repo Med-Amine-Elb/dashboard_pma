@@ -13,6 +13,7 @@ import { EventModal } from "@/components/event-modal"
 import { useToast } from "@/hooks/use-toast"
 import { CalendarEventControllerApi } from "@/api/generated"
 import { getApiConfig } from "@/lib/apiClient"
+import { useUser } from "@/contexts/UserContext"
 
 interface CalendarEvent {
   id: number
@@ -24,7 +25,8 @@ interface CalendarEvent {
 }
 
 export default function CalendarPage() {
-  const [user, setUser] = useState({ name: "Randy Riley", email: "randy.riley@company.com", avatar: "" })
+  const { userData } = useUser()
+  const [user, setUser] = useState({ name: "", email: "", avatar: "" })
   const [events, setEvents] = useState<CalendarEvent[]>([])
   const [currentDate, setCurrentDate] = useState(new Date())
   const [selectedDate, setSelectedDate] = useState<Date | null>(null)
@@ -41,8 +43,15 @@ export default function CalendarPage() {
       return
     }
 
+    // Update user data from context
+    setUser({
+      name: userData.name || "Admin",
+      email: userData.email || "",
+      avatar: userData.avatar || "",
+    })
+
     loadEvents()
-  }, [])
+  }, [userData])
 
   const loadEvents = async () => {
     try {

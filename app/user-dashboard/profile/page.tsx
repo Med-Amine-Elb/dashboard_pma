@@ -30,8 +30,10 @@ import { Sidebar } from "@/components/sidebar"
 import { useToast } from "@/hooks/use-toast"
 import { AuthenticationApi, UserManagementApi } from "@/api/generated";
 import { getApiConfig } from "@/lib/apiClient";
+import { useUser } from "@/contexts/UserContext";
 
 export default function ProfilePage() {
+  const { userData } = useUser()
   const [user, setUser] = useState({
     name: "",
     email: "",
@@ -62,8 +64,24 @@ export default function ProfilePage() {
       return
     }
 
+    // Update user data from context
+    setUser({
+      name: userData.name || "",
+      email: userData.email || "",
+      avatar: userData.avatar || "",
+      department: userData.department || "",
+      position: "",
+      employeeId: "",
+      phone: "",
+      extension: "",
+      manager: "",
+      location: "",
+      startDate: "",
+      lastLogin: "",
+    })
+
     fetchUser()
-  }, [])
+  }, [userData])
 
   const fetchUser = async () => {
     setLoading(true)

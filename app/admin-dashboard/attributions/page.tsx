@@ -7,12 +7,14 @@ import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Search, Bell, Plus, Download, Edit, Trash2, Globe } from "lucide-react"
+import { Pagination, PaginationContent, PaginationItem, PaginationLink, PaginationNext, PaginationPrevious } from "@/components/ui/pagination"
 import { Sidebar } from "@/components/sidebar"
 import { DataTable } from "@/components/data-table"
 import { AttributionModal } from "@/components/attribution-modal"
 import { useToast } from "@/hooks/use-toast"
 import { AttributionManagementApi, AttributionDtoStatusEnum } from "@/api/generated";
 import { getApiConfig } from "@/lib/apiClient";
+import { useUser } from "@/contexts/UserContext";
 
 interface Attribution {
   id: string
@@ -31,7 +33,8 @@ interface Attribution {
 }
 
 export default function AttributionsPage() {
-  const [user, setUser] = useState({ name: "Randy Riley", email: "randy.riley@company.com", avatar: "" })
+  const { userData } = useUser()
+  const [user, setUser] = useState({ name: "", email: "", avatar: "" })
   const [attributions, setAttributions] = useState<Attribution[]>([])
   const [filteredAttributions, setFilteredAttributions] = useState<Attribution[]>([])
   const [searchTerm, setSearchTerm] = useState("")
@@ -43,6 +46,20 @@ export default function AttributionsPage() {
   const { toast } = useToast()
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [page, setPage] = useState(1)
+  const [limit, setLimit] = useState(10)
+  const [total, setTotal] = useState(0)
+  const [totalPages, setTotalPages] = useState(0)
+
+  const getPageNumbers = () => {
+    const pages: number[] = []
+    const maxToShow = 5
+    let start = Math.max(1, page - 2)
+    let end = Math.min(totalPages, start + maxToShow - 1)
+    if (end - start < maxToShow - 1) start = Math.max(1, end - maxToShow + 1)
+    for (let p = start; p <= end; p++) pages.push(p)
+    return pages
+  }
 
   useEffect(() => {
     // Check authentication
@@ -54,8 +71,15 @@ export default function AttributionsPage() {
       return
     }
 
+    // Update user data from context
+    setUser({
+      name: userData.name || "Admin",
+      email: userData.email || "",
+      avatar: userData.avatar || "",
+    })
+
     fetchAttributions()
-  }, [])
+  }, [page, limit, statusFilter, userData])
 
   useEffect(() => {
     filterAttributions()
@@ -87,13 +111,14 @@ export default function AttributionsPage() {
       console.log("API config:", getApiConfig(token))
       console.log("Fetching attributions...")
       
-      const res = await api.getAttributions()
+      const res = await api.getAttributions(page, limit)
       console.log("API Response:", res)
       console.log("Response data:", res.data)
       console.log("Response status:", res.status)
       
       // Correctly extract attributions from backend response
       let apiAttributions: any[] = [];
+      let meta: any = {}
       if (Array.isArray(res.data)) {
         apiAttributions = res.data;
       } else if (
@@ -102,11 +127,13 @@ export default function AttributionsPage() {
         Array.isArray((res.data.data as any).attributions)
       ) {
         apiAttributions = (res.data.data as any).attributions;
+        meta = (res.data.data as any).pagination || {}
       } else if (
         res.data && typeof res.data === 'object' &&
         Array.isArray((res.data as any).attributions)
       ) {
         apiAttributions = (res.data as any).attributions;
+        meta = (res.data as any).pagination || {}
       }
       
       console.log("Processed attributions:", apiAttributions)
@@ -129,6 +156,10 @@ export default function AttributionsPage() {
       
       console.log("Mapped attributions:", mappedAttributions)
       setAttributions(mappedAttributions)
+      if (meta) {
+        setTotal(meta.total ?? mappedAttributions.length)
+        setTotalPages(meta.totalPages ?? Math.ceil((meta.total ?? mappedAttributions.length)/limit))
+      }
       
     } catch (err: any) {
       console.error("Error fetching attributions:", err)
@@ -521,6 +552,7 @@ export default function AttributionsPage() {
                 ) : error ? (
                   <div className="py-8 text-center text-red-500">{error}</div>
                 ) : (
+                <>
                 <DataTable
                   data={filteredAttributions}
                   columns={attributionColumns}
@@ -557,7 +589,29 @@ export default function AttributionsPage() {
                     }
                       return attr[key as keyof Attribution] || "-"
                   }}
+                useExternalPagination
                 />
+                {/* Pagination */}
+                {totalPages > 1 && (
+                  <Pagination className="justify-end mt-4">
+                    <PaginationContent>
+                      <PaginationItem>
+                        <PaginationPrevious href="#" onClick={(e)=>{e.preventDefault(); setPage((p)=>Math.max(1,p-1))}} />
+                      </PaginationItem>
+                      {getPageNumbers().map((p) => (
+                        <PaginationItem key={p}>
+                          <PaginationLink href="#" isActive={p===page} onClick={(e)=>{e.preventDefault(); setPage(p)}}>
+                            {p}
+                          </PaginationLink>
+                        </PaginationItem>
+                      ))}
+                      <PaginationItem>
+                        <PaginationNext href="#" onClick={(e)=>{e.preventDefault(); setPage((p)=>Math.min(totalPages,p+1))}} />
+                      </PaginationItem>
+                    </PaginationContent>
+                  </Pagination>
+                )}
+                </>
                 )}
               </CardContent>
             </Card>

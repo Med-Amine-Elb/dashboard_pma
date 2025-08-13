@@ -10,6 +10,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
 import { useToast } from "@/hooks/use-toast"
+import { useUser } from "@/contexts/UserContext"
 import { Toaster } from "@/components/ui/toaster"
 import { User, Mail, Phone, Calendar, Edit, Save, X, Award, TrendingUp, Users, CheckCircle, RefreshCw } from "lucide-react"
 import { useRouter } from "next/navigation"
@@ -17,14 +18,15 @@ import { AttributionManagementApi, UserManagementApi } from "@/api/generated"
 import { getApiConfig } from "@/lib/apiClient"
 
 export default function AssignerProfilePage() {
+  const { userData } = useUser()
   const [isEditing, setIsEditing] = useState(false)
   const [loading, setLoading] = useState(true)
   const [profile, setProfile] = useState({
-    name: "Randy Riley",
-    email: "randy.riley@company.com",
-    phone: "+33 1 23 45 67 89",
-    joinDate: "Janvier 2023",
-    department: "IT Support",
+    name: "",
+    email: "",
+    phone: "",
+    joinDate: "",
+    department: "",
     position: "Senior Assigner",
     avatarUrl: "",
   })
@@ -45,8 +47,20 @@ export default function AssignerProfilePage() {
       router.push("/")
       return
     }
+
+    // Update profile data from context
+    setProfile({
+      name: userData.name || "Assigner",
+      email: userData.email || "",
+      phone: "",
+      joinDate: "",
+      department: userData.department || "",
+      position: "Senior Assigner",
+      avatarUrl: userData.avatar || "",
+    })
+
     fetchProfileData()
-  }, [router])
+  }, [userData, router])
 
   const fetchProfileData = async () => {
     setLoading(true)

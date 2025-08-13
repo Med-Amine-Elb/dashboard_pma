@@ -14,6 +14,7 @@ import { AssignmentHistoryModal } from "@/components/assignment-history-modal"
 import { useToast } from "@/hooks/use-toast"
 import { SIMCardManagementApi } from "@/api/generated/apis/simcard-management-api"
 import { getApiConfig } from "@/lib/apiClient"
+import { useUser } from "@/contexts/UserContext"
 import { SimCardDto } from "@/api/generated/models"
 import axios from "axios"
 
@@ -50,7 +51,8 @@ interface PaginationInfo {
 }
 
 export default function SimAssignmentsPage() {
-  const [user, setUser] = useState({ name: "Randy Riley", email: "randy.riley@company.com", avatar: "" })
+  const { userData } = useUser()
+  const [user, setUser] = useState({ name: "", email: "", avatar: "" })
   const [simCards, setSimCards] = useState<SimCard[]>([])
   const [filteredSimCards, setFilteredSimCards] = useState<SimCard[]>([])
   const [assignmentHistory, setAssignmentHistory] = useState<AssignmentHistory[]>([])
@@ -80,9 +82,16 @@ export default function SimAssignmentsPage() {
       return
     }
 
+    // Update user data from context
+    setUser({
+      name: userData.name || "Assigner",
+      email: userData.email || "",
+      avatar: userData.avatar || "",
+    })
+
     fetchSimCards()
     loadAssignmentHistory()
-  }, [pagination.page, pagination.limit, statusFilter, searchTerm])
+  }, [pagination.page, pagination.limit, statusFilter, searchTerm, userData])
 
   const fetchSimCards = async () => {
     setLoading(true)

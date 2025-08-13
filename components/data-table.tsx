@@ -17,16 +17,17 @@ interface DataTableProps<T = any> {
   columns: Column[]
   onRowClick?: (row: T) => void
   renderCell?: (row: T, key: string) => React.ReactNode
+  useExternalPagination?: boolean // if true, do not slice or render internal pager
 }
 
-export function DataTable<T extends Record<string, any>>({ data, columns, onRowClick, renderCell }: DataTableProps<T>) {
+export function DataTable<T extends Record<string, any>>({ data, columns, onRowClick, renderCell, useExternalPagination }: DataTableProps<T>) {
   const [currentPage, setCurrentPage] = useState(1)
   const itemsPerPage = 10
 
   // Pagination
-  const totalPages = Math.ceil(data.length / itemsPerPage)
-  const startIndex = (currentPage - 1) * itemsPerPage
-  const paginatedData = data.slice(startIndex, startIndex + itemsPerPage)
+  const totalPages = useExternalPagination ? 1 : Math.ceil(data.length / itemsPerPage)
+  const startIndex = useExternalPagination ? 0 : (currentPage - 1) * itemsPerPage
+  const paginatedData = useExternalPagination ? data : data.slice(startIndex, startIndex + itemsPerPage)
 
   const getStatusColor = (status: string) => {
     const colors: Record<string, string> = {
@@ -86,7 +87,7 @@ export function DataTable<T extends Record<string, any>>({ data, columns, onRowC
       </div>
 
       {/* Pagination */}
-      {totalPages > 1 && (
+      {!useExternalPagination && totalPages > 1 && (
         <div className="flex items-center justify-between">
           <div className="text-sm text-gray-600">
             Affichage de {startIndex + 1} à {Math.min(startIndex + itemsPerPage, data.length)} sur {data.length}{" "}

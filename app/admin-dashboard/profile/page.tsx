@@ -11,6 +11,7 @@ import { Separator } from "@/components/ui/separator"
 import { Bell, Globe, Camera, Save, Edit, Activity, Users, Smartphone, CreditCard } from "lucide-react"
 import { Sidebar } from "@/components/sidebar"
 import { useToast } from "@/hooks/use-toast"
+import { useUser } from "@/contexts/UserContext"
 
 interface UserProfile {
   id: string
@@ -33,16 +34,17 @@ interface UserStats {
 }
 
 export default function ProfilePage() {
+  const { userData } = useUser()
   const [user, setUser] = useState<UserProfile>({
     id: "1",
-    name: "Randy Riley",
-    email: "randy.riley@company.com",
-    phone: "+33 6 12 34 56 78",
-    department: "IT",
+    name: "",
+    email: "",
+    phone: "",
+    department: "",
     role: "Administrateur",
-    joinDate: "2023-01-15",
-    bio: "Administrateur système responsable de la gestion du parc téléphonique de l'entreprise.",
-    location: "Paris, France",
+    joinDate: "",
+    bio: "",
+    location: "",
   })
 
   const [stats, setStats] = useState<UserStats>({
@@ -66,14 +68,30 @@ export default function ProfilePage() {
       return
     }
 
-    // Load user data from localStorage if available
-    const savedUser = localStorage.getItem("currentUser")
-    if (savedUser) {
-      const userData = JSON.parse(savedUser)
-      setUser(userData)
-      setFormData(userData)
-    }
-  }, [])
+    // Update user data from context
+    setUser({
+      id: "1",
+      name: userData.name || "Admin",
+      email: userData.email || "",
+      phone: "",
+      department: userData.department || "",
+      role: "Administrateur",
+      joinDate: "",
+      bio: "Administrateur système responsable de la gestion du parc téléphonique de l'entreprise.",
+      location: "Paris, France",
+    })
+    setFormData({
+      id: "1",
+      name: userData.name || "Admin",
+      email: userData.email || "",
+      phone: "",
+      department: userData.department || "",
+      role: "Administrateur",
+      joinDate: "",
+      bio: "Administrateur système responsable de la gestion du parc téléphonique de l'entreprise.",
+      location: "Paris, France",
+    })
+  }, [userData])
 
   const handleLogout = () => {
     localStorage.clear()

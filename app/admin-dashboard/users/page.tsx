@@ -6,7 +6,8 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { Search, Bell, Plus, Download, Edit, Trash2, Globe, RefreshCw } from "lucide-react"
+import { Search, Bell, Plus, Download, Edit, Trash2, Globe } from "lucide-react"
+import { Pagination, PaginationContent, PaginationItem, PaginationLink, PaginationNext, PaginationPrevious } from "@/components/ui/pagination"
 import { Sidebar } from "@/components/sidebar"
 import { DataTable } from "@/components/data-table"
 import { UserModal } from "@/components/user-modal"
@@ -14,6 +15,7 @@ import { useToast } from "@/hooks/use-toast"
 import { UserManagementApi } from "@/api/generated";
 import { UserDtoRoleEnum, UserDtoStatusEnum } from "@/api/generated";
 import { getApiConfig } from "@/lib/apiClient";
+import { useUser } from "@/contexts/UserContext";
 
 // Local table view user model (lowercase status for display)
 interface User {
@@ -48,7 +50,8 @@ type ModalUser = {
 }
 
 export default function UsersPage() {
-  const [user, setUser] = useState({ name: "Randy Riley", email: "randy.riley@company.com", avatar: "" })
+  const { userData } = useUser()
+  const [user, setUser] = useState({ name: "", email: "", avatar: "" })
   const [users, setUsers] = useState<User[]>([])
   const [filteredUsers, setFilteredUsers] = useState<User[]>([])
   const [searchTerm, setSearchTerm] = useState("")
@@ -60,6 +63,20 @@ export default function UsersPage() {
   const { toast } = useToast()
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [page, setPage] = useState(1)
+  const [limit, setLimit] = useState(10)
+  const [total, setTotal] = useState(0)
+  const [totalPages, setTotalPages] = useState(0)
+
+  const getPageNumbers = () => {
+    const pages: number[] = []
+    const maxToShow = 5
+    let start = Math.max(1, page - 2)
+    let end = Math.min(totalPages, start + maxToShow - 1)
+    if (end - start < maxToShow - 1) start = Math.max(1, end - maxToShow + 1)
+    for (let p = start; p <= end; p++) pages.push(p)
+    return pages
+  }
 
   useEffect(() => {
     // Check authentication
@@ -71,8 +88,15 @@ export default function UsersPage() {
       return
     }
 
+    // Update user data from context
+    setUser({
+      name: userData.name || "Admin",
+      email: userData.email || "",
+      avatar: userData.avatar || "",
+    })
+
     fetchUsers()
-  }, [])
+  }, [page, limit, userData])
 
   useEffect(() => {
     filterUsers()
@@ -104,7 +128,7 @@ export default function UsersPage() {
       console.log("API config:", getApiConfig(token))
       console.log("Fetching users...")
       
-      const res = await api.getUsers()
+      const res = await api.getUsers(page, limit)
       console.log("API Response:", res)
       const body: any = res.data as any
       console.log("Response data:", body)
@@ -112,16 +136,20 @@ export default function UsersPage() {
 
       // Handle different response formats
       let apiUsers: any[] = []
+      let meta: any = {}
       if (body) {
         if (Array.isArray(body)) {
           apiUsers = body
         } else if (body.data && body.data.users && Array.isArray(body.data.users)) {
           // Backend format: { success: true, data: { users: [...], pagination: {...} } }
           apiUsers = body.data.users
+          meta = body.data.pagination || {}
         } else if (body.content && Array.isArray(body.content)) {
           apiUsers = body.content
+          meta = { page: (body.pageable?.pageNumber ?? 0) + 1, limit: body.size, total: body.totalElements, totalPages: body.totalPages }
         } else if (body.users && Array.isArray(body.users)) {
           apiUsers = body.users
+          meta = body.pagination || {}
         } else if (body.data && Array.isArray(body.data)) {
           apiUsers = body.data
         } else {
@@ -148,6 +176,10 @@ export default function UsersPage() {
       
       console.log("Mapped users:", mappedUsers)
       setUsers(mappedUsers)
+      if (meta) {
+        setTotal(meta.total ?? mappedUsers.length)
+        setTotalPages(meta.totalPages ?? Math.ceil((meta.total ?? mappedUsers.length)/limit))
+      }
       
     } catch (err: any) {
       console.error("Error fetching users:", err)
@@ -533,10 +565,7 @@ export default function UsersPage() {
                       <Download className="h-4 w-4 mr-2" />
                       Exporter
                     </Button>
-                    <Button variant="outline" onClick={fetchUsers}>
-                      <RefreshCw className="h-4 w-4 mr-2" />
-                      Rafraîchir
-                    </Button>
+
                     <Button
                       onClick={handleAddUser}
                       className="bg-gradient-to-r from-emerald-500 to-green-600 text-white"
@@ -557,7 +586,6 @@ export default function UsersPage() {
                   <div className="py-8 text-center">
                     <p className="text-red-500 mb-2">{error}</p>
                     <Button onClick={fetchUsers} variant="outline" size="sm">
-                      <RefreshCw className="h-4 w-4 mr-2" />
                       Réessayer
                     </Button>
                   </div>
@@ -599,7 +627,28 @@ export default function UsersPage() {
                     }
                     return user[key as keyof User] || "-"
                   }}
+                useExternalPagination
                 />
+                {/* Pagination */}
+                {totalPages > 1 && (
+                  <Pagination className="justify-end mt-4">
+                    <PaginationContent>
+                      <PaginationItem>
+                        <PaginationPrevious href="#" onClick={(e)=>{e.preventDefault(); setPage((p)=>Math.max(1,p-1))}} />
+                      </PaginationItem>
+                      {getPageNumbers().map((p) => (
+                        <PaginationItem key={p}>
+                          <PaginationLink href="#" isActive={p===page} onClick={(e)=>{e.preventDefault(); setPage(p)}}>
+                            {p}
+                          </PaginationLink>
+                        </PaginationItem>
+                      ))}
+                      <PaginationItem>
+                        <PaginationNext href="#" onClick={(e)=>{e.preventDefault(); setPage((p)=>Math.min(totalPages,p+1))}} />
+                      </PaginationItem>
+                    </PaginationContent>
+                  </Pagination>
+                )}
                   </>
                 )}
               </CardContent>

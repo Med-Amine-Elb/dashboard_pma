@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Search, Bell, Plus, Download, Edit, Trash2, Globe, History } from "lucide-react"
+import { Pagination, PaginationContent, PaginationItem, PaginationLink, PaginationNext, PaginationPrevious } from "@/components/ui/pagination"
 import { Sidebar } from "@/components/sidebar"
 import { DataTable } from "@/components/data-table"
 import { SimCardModal } from "@/components/sim-card-modal"
@@ -14,6 +15,7 @@ import { AssignmentHistoryModal } from "@/components/assignment-history-modal"
 import { useToast } from "@/hooks/use-toast"
 import { SIMCardManagementApi } from "@/api/generated";
 import { getApiConfig } from "@/lib/apiClient";
+import { useUser } from "@/contexts/UserContext";
 
 interface SimCard {
   id: string
@@ -44,7 +46,8 @@ interface AssignmentHistory {
 }
 
 export default function SimCardsPage() {
-  const [user, setUser] = useState({ name: "Randy Riley", email: "randy.riley@company.com", avatar: "" })
+  const { userData } = useUser()
+  const [user, setUser] = useState({ name: "", email: "", avatar: "" })
   const [simCards, setSimCards] = useState<SimCard[]>([])
   const [filteredSimCards, setFilteredSimCards] = useState<SimCard[]>([])
   const [assignmentHistory, setAssignmentHistory] = useState<AssignmentHistory[]>([])
@@ -60,6 +63,20 @@ export default function SimCardsPage() {
   const { toast } = useToast()
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [page, setPage] = useState(1)
+  const [limit, setLimit] = useState(10)
+  const [total, setTotal] = useState(0)
+  const [totalPages, setTotalPages] = useState(0)
+
+  const getPageNumbers = () => {
+    const pages: number[] = []
+    const maxToShow = 5
+    let start = Math.max(1, page - 2)
+    let end = Math.min(totalPages, start + maxToShow - 1)
+    if (end - start < maxToShow - 1) start = Math.max(1, end - maxToShow + 1)
+    for (let p = start; p <= end; p++) pages.push(p)
+    return pages
+  }
 
   useEffect(() => {
     // Check authentication
@@ -71,9 +88,16 @@ export default function SimCardsPage() {
       return
     }
 
+    // Update user data from context
+    setUser({
+      name: userData.name || "Admin",
+      email: userData.email || "",
+      avatar: userData.avatar || "",
+    })
+
     fetchSimCards()
     loadAssignmentHistory()
-  }, [])
+  }, [page, limit, statusFilter, carrierFilter, userData])
 
   useEffect(() => {
     filterSimCards()
@@ -105,13 +129,14 @@ export default function SimCardsPage() {
       console.log("API config:", getApiConfig(token))
       console.log("Fetching SIM cards...")
       
-      const res = await api.getSimCards()
+      const res = await api.getSimCards(page, limit)
       console.log("API Response:", res)
       console.log("Response data:", res.data)
       console.log("Response status:", res.status)
       
       // Correctly extract sim cards from backend response (use 'simcards' lowercase)
       let apiSimCards: any[] = [];
+      let meta: any = {}
       if (Array.isArray(res.data)) {
         apiSimCards = res.data;
       } else if (
@@ -120,11 +145,13 @@ export default function SimCardsPage() {
         Array.isArray((res.data.data as any).simcards)
       ) {
         apiSimCards = (res.data.data as any).simcards;
+        meta = (res.data.data as any).pagination || {}
       } else if (
         res.data && typeof res.data === 'object' &&
         Array.isArray((res.data as any).simcards)
       ) {
         apiSimCards = (res.data as any).simcards;
+        meta = (res.data as any).pagination || {}
       }
       
       console.log("Processed SIM cards:", apiSimCards)
@@ -147,6 +174,10 @@ export default function SimCardsPage() {
       
       console.log("Mapped SIM cards:", mappedSimCards)
       setSimCards(mappedSimCards)
+      if (meta) {
+        setTotal(meta.total ?? mappedSimCards.length)
+        setTotalPages(meta.totalPages ?? Math.ceil((meta.total ?? mappedSimCards.length)/limit))
+      }
       
     } catch (err: any) {
       console.error("Error fetching SIM cards:", err)
@@ -433,7 +464,7 @@ export default function SimCardsPage() {
     return colors[status as keyof typeof colors] || "bg-gray-100 text-gray-800"
   }
 
-  const carriers = ["Orange", "SFR", "Bouygues", "Free"]
+  const carriers = ["Orange", "Maroc Telecom"]
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100">
@@ -536,6 +567,7 @@ export default function SimCardsPage() {
                 ) : error ? (
                   <div className="py-8 text-center text-red-500">{error}</div>
                 ) : (
+                <>
                 <DataTable
                   data={filteredSimCards}
                   columns={simColumns}
@@ -590,7 +622,29 @@ export default function SimCardsPage() {
                     }
                     return sim[key as keyof SimCard] || "-"
                   }}
+                useExternalPagination
                 />
+                {/* Pagination */}
+                {totalPages > 1 && (
+                  <Pagination className="justify-end mt-4">
+                    <PaginationContent>
+                      <PaginationItem>
+                        <PaginationPrevious href="#" onClick={(e)=>{e.preventDefault(); setPage((p)=>Math.max(1,p-1))}} />
+                      </PaginationItem>
+                      {getPageNumbers().map((p) => (
+                        <PaginationItem key={p}>
+                          <PaginationLink href="#" isActive={p===page} onClick={(e)=>{e.preventDefault(); setPage(p)}}>
+                            {p}
+                          </PaginationLink>
+                        </PaginationItem>
+                      ))}
+                      <PaginationItem>
+                        <PaginationNext href="#" onClick={(e)=>{e.preventDefault(); setPage((p)=>Math.min(totalPages,p+1))}} />
+                      </PaginationItem>
+                    </PaginationContent>
+                  </Pagination>
+                )}
+                </>
                 )}
               </CardContent>
             </Card>
