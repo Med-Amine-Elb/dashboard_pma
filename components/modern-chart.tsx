@@ -9,13 +9,28 @@ interface ChartData {
   value?: number
 }
 
-interface ModernChartProps {
-  type: "line" | "bar" | "doughnut"
-  data: ChartData[]
-  height: number
+interface ChartDataset {
+  label?: string
+  data: number[]
+  borderColor?: string
+  backgroundColor?: string | string[]
+  borderWidth?: number
+  tension?: number
 }
 
-export function ModernChart({ type, data, height }: ModernChartProps) {
+interface ChartDataConfig {
+  labels: string[]
+  datasets: ChartDataset[]
+}
+
+interface ModernChartProps {
+  type: "line" | "bar" | "doughnut"
+  data: ChartData[] | ChartDataConfig
+  height?: number
+  options?: any
+}
+
+export function ModernChart({ type, data, height = 300, options }: ModernChartProps) {
   const chartRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -23,6 +38,23 @@ export function ModernChart({ type, data, height }: ModernChartProps) {
 
     const chartContainer = chartRef.current
     chartContainer.innerHTML = ""
+
+    // Handle both old format (ChartData[]) and new format (ChartDataConfig)
+    let chartData: ChartData[]
+    let labels: string[] = []
+
+    if (Array.isArray(data)) {
+      chartData = data
+      labels = data.map(item => item.name)
+    } else {
+      // New format with labels and datasets
+      chartData = data.labels.map((label, index) => ({
+        name: label,
+        value: data.datasets[0]?.data[index] || 0,
+        value1: data.datasets[0]?.data[index] || 0
+      }))
+      labels = data.labels
+    }
 
     if (type === "line") {
       // Create line chart
@@ -81,7 +113,7 @@ export function ModernChart({ type, data, height }: ModernChartProps) {
       svg.appendChild(defs)
 
       // Calculate points
-      const maxValue = Math.max(...data.map((d) => Math.max(d.value1, d.value2 || 0)))
+      const maxValue = Math.max(...chartData.map((d) => Math.max(d.value1, d.value2 || 0)))
       const padding = 40
       const chartWidth = 800 - padding * 2
       const chartHeight = height - padding * 2
@@ -97,8 +129,8 @@ export function ModernChart({ type, data, height }: ModernChartProps) {
       let blueAreaData = ""
       let yellowAreaData = ""
 
-      data.forEach((point, index) => {
-        const x = padding + (index / (data.length - 1)) * chartWidth
+      chartData.forEach((point, index) => {
+        const x = padding + (index / (chartData.length - 1)) * chartWidth
         const y1 = padding + chartHeight - (point.value1 / maxValue) * chartHeight
         const y2 = padding + chartHeight - ((point.value2 || 0) / maxValue) * chartHeight
 
@@ -148,9 +180,9 @@ export function ModernChart({ type, data, height }: ModernChartProps) {
       chartDiv.className = "flex items-end justify-between p-4 bg-gray-50 rounded-lg"
       chartDiv.style.height = `${height}px`
 
-      const maxValue = Math.max(...data.map((d) => Math.max(d.value1, d.value2 || 0)))
+      const maxValue = Math.max(...chartData.map((d) => Math.max(d.value1, d.value2 || 0)))
 
-      data.forEach((item) => {
+      chartData.forEach((item) => {
         const barGroup = document.createElement("div")
         barGroup.className = "flex flex-col items-center space-y-2"
 
@@ -189,7 +221,7 @@ export function ModernChart({ type, data, height }: ModernChartProps) {
       svg.setAttribute("height", height.toString())
       svg.setAttribute("viewBox", `0 0 ${height} ${height}`)
 
-      const total = data.reduce((sum, item) => sum + (item.value || 0), 0)
+      const total = chartData.reduce((sum, item) => sum + (item.value || 0), 0)
       const centerX = height / 2
       const centerY = height / 2
       const radius = height / 2 - 20
@@ -197,7 +229,17 @@ export function ModernChart({ type, data, height }: ModernChartProps) {
 
       let currentAngle = -90
 
-      data.forEach((item, index) => {
+      // Define colors for doughnut chart
+      const colors = [
+        'rgba(34, 197, 94, 0.8)',   // Green
+        'rgba(59, 130, 246, 0.8)',  // Blue
+        'rgba(245, 158, 11, 0.8)',  // Orange
+        'rgba(239, 68, 68, 0.8)',   // Red
+        'rgba(139, 92, 246, 0.8)',  // Purple
+        'rgba(236, 72, 153, 0.8)',  // Pink
+      ]
+
+      chartData.forEach((item, index) => {
         const percentage = (item.value || 0) / total
         const angle = percentage * 360
 
@@ -226,7 +268,7 @@ export function ModernChart({ type, data, height }: ModernChartProps) {
 
         const path = document.createElementNS("http://www.w3.org/2000/svg", "path")
         path.setAttribute("d", pathData)
-        path.setAttribute("fill", index === 0 ? "#8B5CF6" : "#E5E7EB")
+        path.setAttribute("fill", colors[index % colors.length])
 
         svg.appendChild(path)
         currentAngle += angle

@@ -18,6 +18,7 @@ import {
   LinkIcon,
   LayoutDashboard,
   UserCheck,
+  FileText,
 } from "lucide-react"
 import Link from "next/link"
 import { useUser } from "@/contexts/UserContext"
@@ -43,6 +44,7 @@ export function Sidebar({ activeItem, onLogout }: SidebarProps) {
         { id: "sim-cards", label: "Cartes SIM", icon: CreditCard, href: "/admin-dashboard/sim-cards" },
         { id: "attributions", label: "Attributions", icon: LinkIcon, href: "/admin-dashboard/attributions" },
         { id: "calendar", label: "Planification", icon: Calendar, href: "/admin-dashboard/calendar" },
+        { id: "reports", label: "Rapports", icon: FileText, href: "/admin-dashboard/reports" },
       ]
     } else if (userRole === "assigner") {
       return [
@@ -62,6 +64,7 @@ export function Sidebar({ activeItem, onLogout }: SidebarProps) {
         { id: "users", label: "Utilisateurs", icon: Users, href: "/assigner-dashboard/users" },
         { id: "phones", label: "Téléphones", icon: Phone, href: "/assigner-dashboard/phones" },
         { id: "calendar", label: "Planification", icon: Calendar, href: "/assigner-dashboard/calendar" },
+        { id: "reports", label: "Rapports", icon: FileText, href: "/assigner-dashboard/reports" },
       ]
     } else {
       return [
