@@ -37,6 +37,7 @@ import { getApiConfig } from "@/lib/apiClient"
 import { useUser } from "@/contexts/UserContext"
 import { AttributionDto } from "@/api/generated/models"
 import axios from "axios"
+import { Pagination, PaginationContent, PaginationItem, PaginationLink, PaginationNext, PaginationPrevious } from "@/components/ui/pagination"
 
 interface Attribution {
   id: string
@@ -504,6 +505,16 @@ export default function AssignerAttributionsPage() {
     setPagination(prev => ({ ...prev, page: 1, limit: newLimit }))
   }
 
+  const getPageNumbers = () => {
+    const pages: number[] = []
+    const maxToShow = 5
+    let start = Math.max(1, pagination.page - 2)
+    let end = Math.min(pagination.totalPages, start + maxToShow - 1)
+    if (end - start < maxToShow - 1) start = Math.max(1, end - maxToShow + 1)
+    for (let p = start; p <= end; p++) pages.push(p)
+    return pages
+  }
+
   return (
     <div className="flex min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100">
       <Sidebar activeItem="attributions" onLogout={handleLogout} />
@@ -743,39 +754,26 @@ export default function AssignerAttributionsPage() {
                     </table>
                   </div>
 
-                  {/* Pagination */}
-                  {pagination.totalPages > 1 && (
-                    <div className="flex items-center justify-between mt-6">
-                      <div className="text-sm text-gray-600">
-                        Affichage de {((pagination.page - 1) * pagination.limit) + 1} à{" "}
-                        {Math.min(pagination.page * pagination.limit, pagination.total)} sur {pagination.total}{" "}
-                        résultats
-                      </div>
-                      <div className="flex items-center space-x-2">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => handlePageChange(pagination.page - 1)}
-                          disabled={pagination.page === 1}
-                        >
-                          <ChevronLeft className="h-4 w-4" />
-                          Précédent
-                        </Button>
-                        <span className="text-sm text-gray-600">
-                          Page {pagination.page} sur {pagination.totalPages}
-                        </span>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => handlePageChange(pagination.page + 1)}
-                          disabled={pagination.page === pagination.totalPages}
-                        >
-                          Suivant
-                          <ChevronRight className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    </div>
-                  )}
+                                     {/* Pagination */}
+                   {pagination.totalPages > 1 && (
+                     <Pagination className="justify-end mt-4">
+                       <PaginationContent>
+                         <PaginationItem>
+                           <PaginationPrevious href="#" onClick={(e)=>{e.preventDefault(); handlePageChange(Math.max(1,pagination.page-1))}} />
+                         </PaginationItem>
+                         {getPageNumbers().map((p) => (
+                           <PaginationItem key={p}>
+                             <PaginationLink href="#" isActive={p===pagination.page} onClick={(e)=>{e.preventDefault(); handlePageChange(p)}}>
+                               {p}
+                             </PaginationLink>
+                           </PaginationItem>
+                         ))}
+                         <PaginationItem>
+                           <PaginationNext href="#" onClick={(e)=>{e.preventDefault(); handlePageChange(Math.min(pagination.totalPages,pagination.page+1))}} />
+                         </PaginationItem>
+                       </PaginationContent>
+                     </Pagination>
+                   )}
                 </>
               )}
             </CardContent>
