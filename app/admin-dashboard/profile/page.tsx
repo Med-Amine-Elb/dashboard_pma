@@ -12,6 +12,12 @@ import { Bell, Globe, Camera, Save, Edit, Activity, Users, Smartphone, CreditCar
 import { Sidebar } from "@/components/sidebar"
 import { useToast } from "@/hooks/use-toast"
 import { useUser } from "@/contexts/UserContext"
+import { AttributionManagementApi } from "@/api/generated/apis/attribution-management-api"
+import { PhoneManagementApi } from "@/api/generated/apis/phone-management-api"
+import { UserManagementApi } from "@/api/generated/apis/user-management-api"
+import { SIMCardManagementApi } from "@/api/generated/apis/simcard-management-api"
+import { AuthenticationApi } from "@/api/generated/apis/authentication-api"
+import { getApiConfig } from "@/lib/apiClient"
 
 interface UserProfile {
   id: string
@@ -20,10 +26,7 @@ interface UserProfile {
   phone: string
   department: string
   role: string
-  joinDate: string
   avatar?: string
-  bio?: string
-  location?: string
 }
 
 interface UserStats {
@@ -31,6 +34,14 @@ interface UserStats {
   totalSims: number
   totalUsers: number
   totalAssignments: number
+}
+
+interface RecentActivity {
+  id: number
+  action: string
+  item: string
+  time: string
+  type: 'phone' | 'sim' | 'user' | 'attribution'
 }
 
 export default function ProfilePage() {
@@ -42,20 +53,19 @@ export default function ProfilePage() {
     phone: "",
     department: "",
     role: "Administrateur",
-    joinDate: "",
-    bio: "",
-    location: "",
   })
 
   const [stats, setStats] = useState<UserStats>({
-    totalPhones: 45,
-    totalSims: 38,
-    totalUsers: 127,
-    totalAssignments: 89,
+    totalPhones: 0,
+    totalSims: 0,
+    totalUsers: 0,
+    totalAssignments: 0,
   })
 
+  const [recentActivities, setRecentActivities] = useState<RecentActivity[]>([])
   const [isEditing, setIsEditing] = useState(false)
   const [formData, setFormData] = useState(user)
+  const [loading, setLoading] = useState(true)
   const { toast } = useToast()
 
   useEffect(() => {
@@ -76,9 +86,6 @@ export default function ProfilePage() {
       phone: "",
       department: userData.department || "",
       role: "Administrateur",
-      joinDate: "",
-      bio: "Administrateur système responsable de la gestion du parc téléphonique de l'entreprise.",
-      location: "Paris, France",
     })
     setFormData({
       id: "1",
@@ -87,10 +94,12 @@ export default function ProfilePage() {
       phone: "",
       department: userData.department || "",
       role: "Administrateur",
-      joinDate: "",
-      bio: "Administrateur système responsable de la gestion du parc téléphonique de l'entreprise.",
-      location: "Paris, France",
     })
+
+    // Fetch real data
+    fetchUserData()
+    fetchRecentActivities()
+    fetchStats()
   }, [userData])
 
   const handleLogout = () => {
@@ -98,14 +107,34 @@ export default function ProfilePage() {
     window.location.href = "/"
   }
 
-  const handleSave = () => {
-    setUser(formData)
-    localStorage.setItem("currentUser", JSON.stringify(formData))
-    setIsEditing(false)
-    toast({
-      title: "Profil mis à jour",
-      description: "Vos informations ont été sauvegardées avec succès.",
-    })
+  const handleSave = async () => {
+    try {
+      const token = localStorage.getItem("jwt_token")
+      if (!token) {
+        toast({
+          title: "Erreur",
+          description: "Token d'authentification manquant.",
+          variant: "destructive",
+        })
+        return
+      }
+
+      // For now, just update local state
+      // In a real app, you would call an API to update the user profile
+      setUser(formData)
+      setIsEditing(false)
+      toast({
+        title: "Profil mis à jour",
+        description: "Vos informations ont été sauvegardées avec succès.",
+      })
+    } catch (error) {
+      console.error('Error saving profile:', error)
+      toast({
+        title: "Erreur",
+        description: "Impossible de sauvegarder le profil.",
+        variant: "destructive",
+      })
+    }
   }
 
   const handleCancel = () => {
@@ -113,12 +142,133 @@ export default function ProfilePage() {
     setIsEditing(false)
   }
 
-  const recentActivities = [
-    { id: 1, action: "Ajout d'un nouveau téléphone", item: "iPhone 15 Pro", time: "Il y a 2 heures" },
-    { id: 2, action: "Attribution carte SIM", item: "Marie Martin", time: "Il y a 4 heures" },
-    { id: 3, action: "Modification utilisateur", item: "Jean Dupont", time: "Il y a 1 jour" },
-    { id: 4, action: "Suppression téléphone", item: "Galaxy S22", time: "Il y a 2 jours" },
-  ]
+  const fetchRecentActivities = async () => {
+    try {
+      const attributionApi = new AttributionManagementApi()
+      const phoneApi = new PhoneManagementApi()
+      const userApi = new UserManagementApi()
+      const simCardApi = new SIMCardManagementApi()
+
+      // Fetch recent attributions
+      const attributions = await attributionApi.getAttributions(1, 5)
+      const attributionActivities = Array.isArray(attributions.data.content) 
+        ? attributions.data.content.map((attribution: any, index: number) => ({
+            id: index + 1,
+            action: "Nouvelle attribution",
+            item: `Attribution #${attribution.id}`,
+            time: new Date(attribution.assignmentDate).toLocaleDateString('fr-FR'),
+            type: 'attribution' as const
+          }))
+        : []
+
+      // Fetch recent phones
+      const phones = await phoneApi.getPhones(1, 5)
+      const phoneActivities = Array.isArray(phones.data.content)
+        ? phones.data.content.map((phone: any, index: number) => ({
+            id: attributionActivities.length + index + 1,
+            action: phone.status === 'AVAILABLE' ? "Téléphone disponible" : "Téléphone attribué",
+            item: `${phone.brand} ${phone.model}`,
+            time: new Date().toLocaleDateString('fr-FR'),
+            type: 'phone' as const
+          }))
+        : []
+
+      // Fetch recent SIM cards
+      const simCards = await simCardApi.getSimCards(1, 5)
+      const simCardActivities = Array.isArray(simCards.data.content)
+        ? simCards.data.content.map((simCard: any, index: number) => ({
+            id: attributionActivities.length + phoneActivities.length + index + 1,
+            action: simCard.status === 'AVAILABLE' ? "Carte SIM disponible" : "Carte SIM attribuée",
+            item: simCard.number,
+            time: new Date().toLocaleDateString('fr-FR'),
+            type: 'sim' as const
+          }))
+        : []
+
+      // Fetch recent users
+      const users = await userApi.getUsers(1, 5)
+      const userActivities = Array.isArray(users.data.content)
+        ? users.data.content.map((user: any, index: number) => ({
+            id: attributionActivities.length + phoneActivities.length + simCardActivities.length + index + 1,
+            action: "Utilisateur enregistré",
+            item: user.name,
+            time: new Date().toLocaleDateString('fr-FR'),
+            type: 'user' as const
+          }))
+        : []
+
+      // Combine and sort by time (most recent first)
+      const allActivities = [...attributionActivities, ...phoneActivities, ...simCardActivities, ...userActivities]
+        .sort((a, b) => new Date(b.time).getTime() - new Date(a.time).getTime())
+        .slice(0, 5)
+
+      setRecentActivities(allActivities)
+    } catch (error) {
+      console.error('Error fetching recent activities:', error)
+      // Fallback to empty array
+      setRecentActivities([])
+    }
+  }
+
+  const fetchUserData = async () => {
+    try {
+      setLoading(true)
+      const token = localStorage.getItem("jwt_token")
+      if (!token) {
+        console.error("No JWT token found")
+        return
+      }
+
+      const authApi = new AuthenticationApi(getApiConfig(token))
+      const response = await authApi.getCurrentUser()
+      const userData = response.data.data as any
+
+      // Update user state with complete data from backend
+      const updatedUser = {
+        id: String(userData?.id || "1"),
+        name: userData?.name || userData?.firstName || "Admin",
+        email: userData?.email || "",
+        phone: userData?.phone || "",
+        department: userData?.department || "",
+        role: "Administrateur",
+        avatar: userData?.avatar || "",
+      }
+
+      setUser(updatedUser)
+      setFormData(updatedUser)
+    } catch (error) {
+      console.error('Error fetching user data:', error)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const fetchStats = async () => {
+    try {
+      const phoneApi = new PhoneManagementApi()
+      const userApi = new UserManagementApi()
+      const attributionApi = new AttributionManagementApi()
+      const simCardApi = new SIMCardManagementApi()
+
+      const [phones, users, attributions, simCards] = await Promise.all([
+        phoneApi.getPhones(1, 1),
+        userApi.getUsers(1, 1),
+        attributionApi.getAttributions(1, 1),
+        simCardApi.getSimCards(1, 1)
+      ])
+
+      setStats({
+        totalPhones: typeof phones.data.totalElements === 'number' ? phones.data.totalElements : 0,
+        totalSims: typeof simCards.data.totalElements === 'number' ? simCards.data.totalElements : 0,
+        totalUsers: typeof users.data.totalElements === 'number' ? users.data.totalElements : 0,
+        totalAssignments: typeof attributions.data.totalElements === 'number' ? attributions.data.totalElements : 0,
+      })
+    } catch (error) {
+      console.error('Error fetching stats:', error)
+    }
+  }
+
+
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100">
@@ -202,75 +352,55 @@ export default function ProfilePage() {
                     <Badge className="bg-green-100 text-green-800">{user.role}</Badge>
                   </div>
 
-                  {/* Form Section */}
-                  <div className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="name">Nom complet</Label>
-                      <Input
-                        id="name"
-                        value={formData.name}
-                        onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                        disabled={!isEditing}
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="email">Email</Label>
-                      <Input
-                        id="email"
-                        type="email"
-                        value={formData.email}
-                        onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                        disabled={!isEditing}
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="phone">Téléphone</Label>
-                      <Input
-                        id="phone"
-                        value={formData.phone}
-                        onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                        disabled={!isEditing}
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="department">Département</Label>
-                      <Input
-                        id="department"
-                        value={formData.department}
-                        onChange={(e) => setFormData({ ...formData, department: e.target.value })}
-                        disabled={!isEditing}
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="location">Localisation</Label>
-                      <Input
-                        id="location"
-                        value={formData.location || ""}
-                        onChange={(e) => setFormData({ ...formData, location: e.target.value })}
-                        disabled={!isEditing}
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="joinDate">Date d'arrivée</Label>
-                      <Input
-                        id="joinDate"
-                        type="date"
-                        value={formData.joinDate}
-                        onChange={(e) => setFormData({ ...formData, joinDate: e.target.value })}
-                        disabled={!isEditing}
-                      />
-                    </div>
-                    <div className="md:col-span-2 space-y-2">
-                      <Label htmlFor="bio">Biographie</Label>
-                      <Input
-                        id="bio"
-                        value={formData.bio || ""}
-                        onChange={(e) => setFormData({ ...formData, bio: e.target.value })}
-                        disabled={!isEditing}
-                        placeholder="Décrivez votre rôle et responsabilités..."
-                      />
-                    </div>
-                  </div>
+                                     {/* Form Section */}
+                   <div className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-4">
+                     {loading ? (
+                       <div className="md:col-span-2 flex items-center justify-center py-8">
+                         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+                         <span className="ml-2 text-gray-600">Chargement des données...</span>
+                       </div>
+                     ) : (
+                       <>
+                         <div className="space-y-2">
+                           <Label htmlFor="name">Nom complet</Label>
+                           <Input
+                             id="name"
+                             value={formData.name}
+                             onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                             disabled={!isEditing}
+                           />
+                         </div>
+                         <div className="space-y-2">
+                           <Label htmlFor="email">Email</Label>
+                           <Input
+                             id="email"
+                             type="email"
+                             value={formData.email}
+                             onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                             disabled={!isEditing}
+                           />
+                         </div>
+                         <div className="space-y-2">
+                           <Label htmlFor="phone">Téléphone</Label>
+                           <Input
+                             id="phone"
+                             value={formData.phone}
+                             onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                             disabled={!isEditing}
+                           />
+                         </div>
+                         <div className="space-y-2">
+                           <Label htmlFor="department">Département</Label>
+                           <Input
+                             id="department"
+                             value={formData.department}
+                             onChange={(e) => setFormData({ ...formData, department: e.target.value })}
+                             disabled={!isEditing}
+                           />
+                         </div>
+                       </>
+                     )}
+                   </div>
                 </div>
 
                 {isEditing && (
@@ -352,21 +482,32 @@ export default function ProfilePage() {
               </CardHeader>
               <CardContent>
                 <div className="space-y-4">
-                  {recentActivities.map((activity, index) => (
-                    <div key={activity.id}>
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center space-x-3">
-                          <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
+                  {recentActivities.length > 0 ? (
+                    recentActivities.map((activity, index) => (
+                      <div key={activity.id}>
+                        <div className="flex items-center justify-between">
+                                                  <div className="flex items-center space-x-3">
+                          <div className={`w-2 h-2 rounded-full ${
+                            activity.type === 'phone' ? 'bg-blue-500' :
+                            activity.type === 'sim' ? 'bg-orange-500' :
+                            activity.type === 'user' ? 'bg-green-500' :
+                            'bg-purple-500'
+                          }`}></div>
                           <div>
                             <p className="text-sm font-medium text-gray-900">{activity.action}</p>
                             <p className="text-sm text-gray-600">{activity.item}</p>
                           </div>
                         </div>
-                        <span className="text-xs text-gray-500">{activity.time}</span>
+                          <span className="text-xs text-gray-500">{activity.time}</span>
+                        </div>
+                        {index < recentActivities.length - 1 && <Separator className="mt-4" />}
                       </div>
-                      {index < recentActivities.length - 1 && <Separator className="mt-4" />}
+                    ))
+                  ) : (
+                    <div className="text-center py-8">
+                      <p className="text-gray-500">Aucune activité récente</p>
                     </div>
-                  ))}
+                  )}
                 </div>
               </CardContent>
             </Card>
