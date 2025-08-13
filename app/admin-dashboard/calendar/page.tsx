@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useState, useEffect } from "react"
@@ -10,8 +11,10 @@ import { Search, Bell, Globe, Plus, CalendarIcon, Clock, User, ChevronLeft, Chev
 import { Sidebar } from "@/components/sidebar"
 import { EventModal } from "@/components/event-modal"
 import { useToast } from "@/hooks/use-toast"
+import { CalendarEventControllerApi } from "@/api/generated"
+import { getApiConfig } from "@/lib/apiClient"
 
-interface Event {
+interface CalendarEvent {
   id: number
   title: string
   time: string
@@ -22,7 +25,7 @@ interface Event {
 
 export default function CalendarPage() {
   const [user, setUser] = useState({ name: "Randy Riley", email: "randy.riley@company.com", avatar: "" })
-  const [events, setEvents] = useState<Event[]>([])
+  const [events, setEvents] = useState<CalendarEvent[]>([])
   const [currentDate, setCurrentDate] = useState(new Date())
   const [selectedDate, setSelectedDate] = useState<Date | null>(null)
   const [isEventModalOpen, setIsEventModalOpen] = useState(false)
@@ -41,58 +44,37 @@ export default function CalendarPage() {
     loadEvents()
   }, [])
 
-  const loadEvents = () => {
-    const mockEvents: Event[] = [
-      {
-        id: 1,
-        title: "Livraison iPhone 15 Pro",
-        time: "09:00 - 10:00",
-        date: "2024-01-22",
-        type: "delivery",
-        assignee: "Jean Dupont",
-      },
-      {
-        id: 2,
-        title: "Maintenance Galaxy S24",
-        time: "11:00 - 12:00",
-        date: "2024-01-22",
-        type: "maintenance",
-        assignee: "Service Technique",
-      },
-      {
-        id: 3,
-        title: "Retour Pixel 8",
-        time: "14:00 - 15:00",
-        date: "2024-01-23",
-        type: "return",
-        assignee: "Marie Martin",
-      },
-      {
-        id: 4,
-        title: "Formation utilisateurs",
-        time: "10:00 - 11:30",
-        date: "2024-01-24",
-        type: "training",
-        assignee: "Équipe Support",
-      },
-      {
-        id: 5,
-        title: "Livraison Samsung Galaxy S22",
-        time: "14:00 - 15:00",
-        date: "2024-01-25",
-        type: "delivery",
-        assignee: "Pierre Durand",
-      },
-      {
-        id: 6,
-        title: "Maintenance iPhone 14",
-        time: "09:00 - 10:30",
-        date: "2024-01-26",
-        type: "maintenance",
-        assignee: "Service Technique",
-      },
-    ]
-    setEvents(mockEvents)
+  const loadEvents = async () => {
+    try {
+      const token = localStorage.getItem("jwt_token")
+      if (!token) {
+        setEvents([])
+        return
+      }
+      const api = new CalendarEventControllerApi(getApiConfig(token))
+      const res = await api.getAllEvents(0, 100, "startTime", "asc")
+      const body: any = res.data
+      const page = body?.content || body?.data?.content || body?.data || []
+      const mapped: CalendarEvent[] = (Array.isArray(page) ? page : []).map((e: any): CalendarEvent => ({
+        id: Number(e.id ?? Date.now()),
+        title: e.title || e.name || "Événement",
+        time: e.timeRange || e.time || "09:00 - 10:00",
+        date: e.date || e.startTime?.substring(0,10) || new Date().toISOString().split("T")[0],
+        type: ((): CalendarEvent["type"] => {
+          const t = String(e.type || e.category || "delivery").toLowerCase()
+          if (t.includes("assign") || t.includes("delivery")) return "delivery"
+          if (t.includes("maint")) return "maintenance"
+          if (t.includes("return")) return "return"
+          if (t.includes("train") || t.includes("meet")) return "training"
+          return "delivery"
+        })(),
+        assignee: e.organizer || e.assignee || (Array.isArray(e.attendees) ? e.attendees[0] : "")
+      }))
+      setEvents(mapped)
+    } catch (err) {
+      console.error("Failed to load events", err)
+      setEvents([])
+    }
   }
 
   const handleLogout = () => {
@@ -104,16 +86,49 @@ export default function CalendarPage() {
     setIsEventModalOpen(true)
   }
 
-  const handleSaveEvent = (eventData: Partial<Event>) => {
-    const newEvent: Event = {
+  const handleSaveEvent = async (eventData: any) => {
+    const newEvent: CalendarEvent = {
       id: Date.now(),
       title: eventData.title || "",
       time: eventData.time || "",
       date: eventData.date || "",
-      type: eventData.type || "delivery",
-      assignee: eventData.assignee || "",
+      // Map event-modal types (assignment/return/maintenance/meeting) to local types
+      type: ((): CalendarEvent["type"] => {
+        const t = (eventData.type || "delivery") as string
+        if (t === "assignment") return "delivery"
+        if (t === "meeting") return "training"
+        if (t === "maintenance") return "maintenance"
+        if (t === "return") return "return"
+        return "delivery"
+      })(),
+      assignee: Array.isArray(eventData.participants) && eventData.participants.length > 0
+        ? eventData.participants[0]
+        : (eventData.assignee || ""),
     }
     setEvents([...events, newEvent])
+
+    // Persist to backend
+    try {
+      const token = localStorage.getItem("jwt_token")
+      if (token) {
+        const api = new CalendarEventControllerApi(getApiConfig(token))
+        await api.createEvent({
+          title: newEvent.title,
+          description: "",
+          startTime: newEvent.date + "T" + (newEvent.time?.split(" - ")[0] || "09:00") + ":00",
+          endTime: newEvent.date + "T" + (newEvent.time?.split(" - ")[1] || "10:00") + ":00",
+          status: "SCHEDULED" as any,
+          location: "",
+          organizer: newEvent.assignee,
+          attendees: [newEvent.assignee],
+          type: newEvent.type.toUpperCase() as any,
+        } as any)
+        // Reload to reflect server truth
+        await loadEvents()
+      }
+    } catch (e) {
+      console.warn("Failed to persist event, keeping local only", e)
+    }
     toast({
       title: "Événement créé",
       description: "Le nouvel événement a été ajouté au calendrier.",

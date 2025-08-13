@@ -12,8 +12,10 @@ import { DataTable } from "@/components/data-table"
 import { UserModal } from "@/components/user-modal"
 import { useToast } from "@/hooks/use-toast"
 import { UserManagementApi } from "@/api/generated";
+import { UserDtoRoleEnum, UserDtoStatusEnum } from "@/api/generated";
 import { getApiConfig } from "@/lib/apiClient";
 
+// Local table view user model (lowercase status for display)
 interface User {
   id: string
   name: string
@@ -28,6 +30,23 @@ interface User {
   position: string
 }
 
+// Modal user model (must match `components/user-modal.tsx` expectations)
+type ModalUser = {
+  id: string
+  name: string
+  email: string
+  password?: string
+  role: "USER" | "ADMIN" | "ASSIGNER"
+  department: string
+  position: string
+  status: "ACTIVE" | "INACTIVE"
+  joinDate: string
+  phone?: string
+  address?: string
+  manager?: string
+  avatar?: string
+}
+
 export default function UsersPage() {
   const [user, setUser] = useState({ name: "Randy Riley", email: "randy.riley@company.com", avatar: "" })
   const [users, setUsers] = useState<User[]>([])
@@ -35,7 +54,7 @@ export default function UsersPage() {
   const [searchTerm, setSearchTerm] = useState("")
   const [departmentFilter, setDepartmentFilter] = useState("all")
   const [isModalOpen, setIsModalOpen] = useState(false)
-  const [selectedUser, setSelectedUser] = useState<User | null>(null)
+  const [selectedUser, setSelectedUser] = useState<ModalUser | null>(null)
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false)
   const [userToDelete, setUserToDelete] = useState<User | null>(null)
   const { toast } = useToast()
@@ -87,43 +106,44 @@ export default function UsersPage() {
       
       const res = await api.getUsers()
       console.log("API Response:", res)
-      console.log("Response data:", res.data)
+      const body: any = res.data as any
+      console.log("Response data:", body)
       console.log("Response status:", res.status)
-      
+
       // Handle different response formats
-      let apiUsers = []
-      if (res.data) {
-        if (Array.isArray(res.data)) {
-          apiUsers = res.data
-        } else if (res.data.data && res.data.data.users && Array.isArray(res.data.data.users)) {
+      let apiUsers: any[] = []
+      if (body) {
+        if (Array.isArray(body)) {
+          apiUsers = body
+        } else if (body.data && body.data.users && Array.isArray(body.data.users)) {
           // Backend format: { success: true, data: { users: [...], pagination: {...} } }
-          apiUsers = res.data.data.users
-        } else if (res.data.content && Array.isArray(res.data.content)) {
-          apiUsers = res.data.content
-        } else if (res.data.users && Array.isArray(res.data.users)) {
-          apiUsers = res.data.users
-        } else if (res.data.data && Array.isArray(res.data.data)) {
-          apiUsers = res.data.data
+          apiUsers = body.data.users
+        } else if (body.content && Array.isArray(body.content)) {
+          apiUsers = body.content
+        } else if (body.users && Array.isArray(body.users)) {
+          apiUsers = body.users
+        } else if (body.data && Array.isArray(body.data)) {
+          apiUsers = body.data
         } else {
-          console.warn("Unexpected response format:", res.data)
+          console.warn("Unexpected response format:", body)
           apiUsers = []
         }
       }
       
       console.log("Processed users:", apiUsers)
       
-      const mappedUsers = apiUsers.map((u: any) => ({
-        id: String(u.id || ""),
-        name: u.name || u.firstName + " " + u.lastName || "",
-        email: u.email || "",
-        department: u.department || "",
-        role: u.role || "",
-        status: (u.status === "ACTIVE" || u.status === "active") ? "active" : "inactive",
-        joinDate: u.joinDate || u.createdAt || "",
-        phone: u.phone || "",
-        address: u.address || "",
-        manager: u.manager || "",
-        position: u.position || "",
+      const mappedUsers: User[] = apiUsers.map((u: any): User => ({
+        id: String(u.id ?? ""),
+        name: (u.name || `${u.firstName ?? ""} ${u.lastName ?? ""}`).trim(),
+        email: u.email ?? "",
+        department: u.department ?? "",
+        role: u.role ?? "",
+        status: ((u.status === "ACTIVE" || u.status === "active") ? "active" : "inactive") as "active" | "inactive",
+        joinDate: u.joinDate ?? u.createdAt ?? "",
+        phone: u.phone ?? "",
+        address: u.address ?? "",
+        manager: u.manager ?? "",
+        position: u.position ?? "",
       }))
       
       console.log("Mapped users:", mappedUsers)
@@ -172,10 +192,10 @@ export default function UsersPage() {
 
   const handleEditUser = (user: User) => {
     // Transform the user data to match UserModal's expected format
-    const transformedUser = {
+    const transformedUser: ModalUser = {
       ...user,
       status: user.status === "active" ? "ACTIVE" : "INACTIVE",
-      role: user.role?.toUpperCase() || "USER",
+      role: (user.role?.toUpperCase() as ModalUser["role"]) || "USER",
     }
     setSelectedUser(transformedUser)
     setIsModalOpen(true)
@@ -218,7 +238,7 @@ export default function UsersPage() {
       }
 
       const userApi = new UserManagementApi(getApiConfig(token))
-      await userApi.deleteUser(userToDelete.id)
+      await userApi.deleteUser(Number(userToDelete.id))
       
       toast({
         title: "Utilisateur supprimé",
@@ -255,7 +275,12 @@ export default function UsersPage() {
     }
   }
 
-  const handleSaveUser = async (userData: Partial<User>) => {
+  // Wrapper passed to modal to satisfy its `(user: Partial<User>) => void` signature
+  const onSaveUser = (userData: any) => {
+    void handleSaveUser(userData)
+  }
+
+  const handleSaveUser = async (userData: any) => {
     try {
       // Validation
       const errors: string[] = []
@@ -305,12 +330,12 @@ export default function UsersPage() {
       
       if (selectedUser) {
         // Update existing user
-        await userApi.updateUser(selectedUser.id, {
+        await userApi.updateUser(Number(selectedUser.id), {
           name: userData.name || "",
           email: userData.email || "",
           department: userData.department || "",
-          role: userData.role?.toUpperCase() || "USER",
-          status: userData.status === "ACTIVE" ? "ACTIVE" : "INACTIVE",
+          role: (userData.role?.toUpperCase() as UserDtoRoleEnum) || UserDtoRoleEnum.User,
+          status: (userData.status as UserDtoStatusEnum) || UserDtoStatusEnum.Active,
           phone: userData.phone || "",
           address: userData.address || "",
           manager: userData.manager || "",
@@ -328,8 +353,8 @@ export default function UsersPage() {
           email: userData.email || "",
           password: userData.password || "defaultPassword123",
           department: userData.department || "",
-          role: userData.role?.toUpperCase() || "USER",
-          status: userData.status === "ACTIVE" ? "ACTIVE" : "INACTIVE",
+          role: (userData.role?.toUpperCase() as UserDtoRoleEnum) || UserDtoRoleEnum.User,
+          status: (userData.status as UserDtoStatusEnum) || UserDtoStatusEnum.Active,
           phone: userData.phone || "",
           address: userData.address || "",
           manager: userData.manager || "",
@@ -586,7 +611,7 @@ export default function UsersPage() {
       <UserModal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
-        onSave={handleSaveUser}
+        onSave={onSaveUser}
         user={selectedUser}
       />
 

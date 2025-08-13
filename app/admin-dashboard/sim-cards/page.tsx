@@ -261,7 +261,7 @@ export default function SimCardsPage() {
       }
 
       const simApi = new SIMCardManagementApi(getApiConfig(token))
-      await simApi.deleteSimCard(simToDelete.id)
+      await simApi.deleteSimCard(Number(simToDelete.id))
       
       toast({
         title: "Carte SIM supprimée",

@@ -11,7 +11,7 @@ import { Sidebar } from "@/components/sidebar"
 import { DataTable } from "@/components/data-table"
 import { AttributionModal } from "@/components/attribution-modal"
 import { useToast } from "@/hooks/use-toast"
-import { AttributionManagementApi } from "@/api/generated";
+import { AttributionManagementApi, AttributionDtoStatusEnum } from "@/api/generated";
 import { getApiConfig } from "@/lib/apiClient";
 
 interface Attribution {
@@ -213,7 +213,7 @@ export default function AttributionsPage() {
       }
 
       const attributionApi = new AttributionManagementApi(getApiConfig(token))
-      await attributionApi.deleteAttribution(attributionToDelete.id)
+      await attributionApi.deleteAttribution(Number(attributionToDelete.id))
       
       toast({
         title: "Attribution supprimée",
@@ -298,7 +298,7 @@ export default function AttributionsPage() {
           simCardId: attributionData.simCardId ? Number(attributionData.simCardId) : undefined,
           assignmentDate: attributionData.assignmentDate || "",
           returnDate: attributionData.returnDate || undefined,
-          status: (attributionData.status || "ACTIVE").toUpperCase(),
+          status: ((attributionData.status || "ACTIVE") as keyof typeof AttributionDtoStatusEnum) ? (attributionData.status as AttributionDtoStatusEnum) : AttributionDtoStatusEnum.Active,
           notes: attributionData.notes || undefined,
         };
         console.log("Update payload:", updatePayload);
@@ -318,7 +318,7 @@ export default function AttributionsPage() {
           simCardId: attributionData.simCardId ? Number(attributionData.simCardId) : undefined,
           assignmentDate: attributionData.assignmentDate || "",
           returnDate: attributionData.returnDate || undefined,
-          status: (attributionData.status || "ACTIVE").toUpperCase(),
+          status: ((attributionData.status || "ACTIVE") as keyof typeof AttributionDtoStatusEnum) ? (attributionData.status as AttributionDtoStatusEnum) : AttributionDtoStatusEnum.Active,
           notes: attributionData.notes || undefined,
         };
         console.log("Create payload:", createPayload);
