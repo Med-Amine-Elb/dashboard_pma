@@ -20,6 +20,7 @@ import {
   UserCheck,
 } from "lucide-react"
 import Link from "next/link"
+import { useUser } from "@/contexts/UserContext"
 
 interface SidebarProps {
   activeItem: string
@@ -28,6 +29,7 @@ interface SidebarProps {
 
 export function Sidebar({ activeItem, onLogout }: SidebarProps) {
   const [isCollapsed, setIsCollapsed] = useState(false)
+  const { userData, loading } = useUser()
 
   // Get user role to show appropriate menu items
   const userRole = typeof window !== "undefined" ? localStorage.getItem("userRole") : null
@@ -155,14 +157,18 @@ export function Sidebar({ activeItem, onLogout }: SidebarProps) {
         {!isCollapsed && (
           <div className="flex items-center space-x-3 p-3 rounded-lg bg-white/5">
             <Avatar className="h-8 w-8">
-              <AvatarImage src="/placeholder.svg" />
+              <AvatarImage src={userData.avatar || "/placeholder.svg"} />
               <AvatarFallback className="bg-gradient-to-r from-blue-500 to-purple-600 text-white text-xs">
-                RR
+                {loading ? "..." : userData.initials || "U"}
               </AvatarFallback>
             </Avatar>
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium text-white truncate">Randy Riley</p>
-              <p className="text-xs text-gray-400 truncate capitalize">{userRole}</p>
+              <p className="text-sm font-medium text-white truncate">
+                {loading ? "Chargement..." : userData.name || "Utilisateur"}
+              </p>
+              <p className="text-xs text-gray-400 truncate">
+                {userData.department ? `${userData.department} • ` : ""}<span className="capitalize">{userRole}</span>
+              </p>
             </div>
           </div>
         )}

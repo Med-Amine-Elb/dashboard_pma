@@ -31,6 +31,7 @@ import { NotificationsDropdown } from "@/components/notifications-dropdown"
 import { useRouter } from "next/navigation"
 import { UserManagementApi } from "@/api/generated"
 import { getApiConfig } from "@/lib/apiClient"
+import { useUser } from "@/contexts/UserContext"
 
 export default function MyPhonePage() {
   interface DashboardResponse {
@@ -43,19 +44,32 @@ export default function MyPhonePage() {
     }
     phone?: {
       model?: string
+      brand?: string
       serialNumber?: string
       imei?: string
+      color?: string
+      storage?: string
+      condition?: string
+      purchaseDate?: string
       assignedDate?: string
       status?: string
+      price?: number
       batteryHealth?: number
       storageUsed?: number
       lastSync?: string
-      brand?: string
-      color?: string
-      storage?: string
+      osVersion?: string
+      phoneNumber?: string
+      warrantyExpiry?: string
+    } | null
+    simCard?: {
+      number?: string
+      carrier?: string
+      dataPlan?: string
+      status?: string
     } | null
   }
 
+  const { userData: contextUser } = useUser()
   const [user, setUser] = useState({
     name: "",
     email: "",
@@ -168,13 +182,20 @@ export default function MyPhonePage() {
           imei: p.imei || "",
           color: p.color || "",
           storage: p.storage || "",
+          condition: p.condition || "",
           assignedDate: p.assignedDate
             ? new Date(p.assignedDate).toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" })
+            : "",
+          warrantyExpiry: p.warrantyExpiry
+            ? new Date(p.warrantyExpiry).toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" })
             : "",
           status: p.status || "",
           batteryHealth: typeof p.batteryHealth === "number" ? p.batteryHealth : 0,
           storageUsed: typeof p.storageUsed === "number" ? p.storageUsed : 0,
           lastSync: p.lastSync ? new Date(p.lastSync).toLocaleString("fr-FR") : "",
+          osVersion: p.osVersion || "",
+          carrier: data?.simCard?.carrier || "",
+          phoneNumber: p.phoneNumber || "",
         }))
       } else {
         setPhoneDetails((prev) => ({
@@ -183,11 +204,18 @@ export default function MyPhonePage() {
           brand: "",
           serialNumber: "",
           imei: "",
+          color: "",
+          storage: "",
+          condition: "",
           assignedDate: "",
+          warrantyExpiry: "",
           status: "Non assigné",
           batteryHealth: 0,
           storageUsed: 0,
           lastSync: "",
+          osVersion: "",
+          carrier: "",
+          phoneNumber: "",
         }))
       }
     } catch (e: any) {
@@ -222,17 +250,37 @@ export default function MyPhonePage() {
   }
 
   const getConditionColor = (condition: string) => {
-    switch (condition.toLowerCase()) {
+    const c = (condition || "").toLowerCase()
+    switch (c) {
       case "excellent":
         return "bg-green-100 text-green-800"
+      case "good":
       case "bon":
         return "bg-blue-100 text-blue-800"
+      case "fair":
       case "moyen":
         return "bg-yellow-100 text-yellow-800"
+      case "poor":
       case "mauvais":
         return "bg-red-100 text-red-800"
       default:
         return "bg-gray-100 text-gray-800"
+    }
+  }
+
+  const translateCondition = (condition: string) => {
+    const c = (condition || "").toLowerCase()
+    switch (c) {
+      case "excellent":
+        return "Excellent"
+      case "good":
+        return "Bon"
+      case "fair":
+        return "Moyen"
+      case "poor":
+        return "Mauvais"
+      default:
+        return condition || "Non spécifié"
     }
   }
 
@@ -288,17 +336,17 @@ export default function MyPhonePage() {
 
                 <div className="flex items-center space-x-3">
                   <Avatar className="h-8 w-8">
-                    <AvatarImage src={user.avatar || "/placeholder.svg"} />
+                    <AvatarImage src={user.avatar || contextUser.avatar || "/placeholder.svg"} />
                     <AvatarFallback className="bg-gradient-to-r from-orange-500 to-red-600 text-white">
-                      {user.name
+                      {(user.name || contextUser.name)
                         .split(" ")
                         .map((n) => n[0])
                         .join("")}
                     </AvatarFallback>
                   </Avatar>
                   <div className="hidden md:block">
-                    <p className="text-sm font-medium text-gray-900">{user.name}</p>
-                    <p className="text-xs text-gray-500">{user.department}</p>
+                    <p className="text-sm font-medium text-gray-900">{user.name || contextUser.name}</p>
+                    <p className="text-xs text-gray-500">{user.department || contextUser.department}</p>
                   </div>
                 </div>
               </div>
@@ -376,7 +424,7 @@ export default function MyPhonePage() {
                       </div>
                       <div>
                         <p className="text-sm font-medium text-gray-600">État</p>
-                        <Badge className={getConditionColor(phoneDetails.condition)}>{phoneDetails.condition}</Badge>
+                        <Badge className={getConditionColor(phoneDetails.condition)}>{translateCondition(phoneDetails.condition)}</Badge>
                       </div>
                     </div>
                     <div className="text-right">
@@ -475,8 +523,14 @@ export default function MyPhonePage() {
                   </div>
                   <Progress value={phoneDetails.storageUsed} className="h-2" />
                   <p className="text-xs text-gray-500">
-                    {Math.round((phoneDetails.storageUsed / 100) * Number.parseInt(phoneDetails.storage))} GB sur{" "}
-                    {phoneDetails.storage}
+                    {phoneDetails.storage && phoneDetails.storageUsed > 0 ? (
+                      <>
+                        {Math.round((phoneDetails.storageUsed / 100) * Number.parseInt(phoneDetails.storage.replace(/[^\d]/g, "")))} GB sur{" "}
+                        {phoneDetails.storage}
+                      </>
+                    ) : (
+                      "Données non disponibles"
+                    )}
                   </p>
                 </CardContent>
               </Card>

@@ -30,6 +30,7 @@ import { NotificationsDropdown } from "@/components/notifications-dropdown"
 import { useRouter } from "next/navigation"
 import { UserManagementApi } from "@/api/generated"
 import { getApiConfig } from "@/lib/apiClient"
+import { useUser } from "@/contexts/UserContext"
 
 export default function UserDashboard() {
   interface DashboardResponse {
@@ -59,6 +60,7 @@ export default function UserDashboard() {
     }>
   }
 
+  const { userData: contextUser } = useUser()
   const [user, setUser] = useState({
     name: "",
     email: "",
@@ -258,7 +260,7 @@ export default function UserDashboard() {
             <div className="flex items-center justify-between">
               <div>
                 <h1 className="text-2xl font-bold text-gray-900">Tableau de bord</h1>
-                <p className="text-gray-600">Bienvenue, {user.name}</p>
+                <p className="text-gray-600">Bienvenue, {user.name || contextUser.name}</p>
               </div>
 
               <div className="flex items-center space-x-4">
@@ -279,17 +281,17 @@ export default function UserDashboard() {
 
                 <div className="flex items-center space-x-3">
                   <Avatar className="h-8 w-8">
-                    <AvatarImage src={user.avatar || "/placeholder.svg"} />
+                    <AvatarImage src={user.avatar || contextUser.avatar || "/placeholder.svg"} />
                     <AvatarFallback className="bg-gradient-to-r from-orange-500 to-red-600 text-white">
-                      {user.name
+                      {(user.name || contextUser.name)
                         .split(" ")
                         .map((n) => n[0])
                         .join("")}
                     </AvatarFallback>
                   </Avatar>
                   <div className="hidden md:block">
-                    <p className="text-sm font-medium text-gray-900">{user.name}</p>
-                    <p className="text-xs text-gray-500">{user.department}</p>
+                    <p className="text-sm font-medium text-gray-900">{user.name || contextUser.name}</p>
+                    <p className="text-xs text-gray-500">{user.department || contextUser.department}</p>
                   </div>
                 </div>
               </div>
