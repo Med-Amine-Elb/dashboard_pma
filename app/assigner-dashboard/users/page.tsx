@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { Search, Bell, Globe, Phone, Mail, Building, ChevronLeft, ChevronRight, RefreshCw } from "lucide-react"
+import { Search, Bell, Globe, Phone, Mail, Building, ChevronLeft, ChevronRight, RefreshCw, Download } from "lucide-react"
 import { Pagination, PaginationContent, PaginationItem, PaginationLink, PaginationNext, PaginationPrevious } from "@/components/ui/pagination"
 import { Sidebar } from "@/components/sidebar"
 import { DataTable } from "@/components/data-table"
@@ -17,6 +17,7 @@ import { SIMCardManagementApi } from "@/api/generated/apis/simcard-management-ap
 import { getApiConfig } from "@/lib/apiClient"
 import { useUser } from "@/contexts/UserContext"
 import { UserDto } from "@/api/generated/models"
+import ExcelJS from 'exceljs'
 
 interface AssignerUser {
   id: string
@@ -337,6 +338,261 @@ export default function AssignerUsersPage() {
     setPagination(prev => ({ ...prev, page: 1, limit: newLimit }))
   }
 
+  const handleExport = async () => {
+    try {
+      setLoading(true)
+      
+      const token = localStorage.getItem("jwt_token")
+      if (!token) {
+        toast({
+          title: "Erreur",
+          description: "Token d'authentification manquant",
+          variant: "destructive",
+        })
+        return
+      }
+
+      const api = new UserManagementApi(getApiConfig(token))
+      
+      // Récupérer tous les utilisateurs (sans pagination)
+      const res = await api.getUsers(1, 10000) // Limite très élevée pour récupérer tous les utilisateurs
+      const body: any = res.data as any
+      
+      // Traiter la réponse comme dans fetchUsers
+      let apiUsers: any[] = []
+      if (body) {
+        if (Array.isArray(body)) {
+          apiUsers = body
+        } else if (body.data && body.data.users && Array.isArray(body.data.users)) {
+          apiUsers = body.data.users
+        } else if (body.content && Array.isArray(body.content)) {
+          apiUsers = body.content
+        } else if (body.users && Array.isArray(body.users)) {
+          apiUsers = body.users
+        } else if (body.data && Array.isArray(body.data)) {
+          apiUsers = body.data
+        } else {
+          console.warn("Unexpected response format:", body)
+          apiUsers = []
+        }
+      }
+      
+      // Mapper les utilisateurs pour l'export avec les attributions
+      const exportUsers = await Promise.all(apiUsers.map(async (u: any) => {
+        // Fetch active assignments for this user
+        let assignedPhone = undefined
+        let assignedSim = undefined
+        
+        try {
+          const attributionApi = new AttributionManagementApi(getApiConfig(token))
+          const attributionsRes = await attributionApi.getAttributions(
+            undefined, undefined, "ACTIVE", parseInt(u.id), undefined, undefined
+          )
+          
+          if (attributionsRes.data && typeof attributionsRes.data === 'object') {
+            const responseData = attributionsRes.data as any
+            let attributions: any[] = []
+            
+            if (responseData.success && responseData.data) {
+              attributions = (responseData.data.attributions as any[]) || []
+            } else if (Array.isArray(responseData)) {
+              attributions = responseData
+            } else if (responseData.attributions) {
+              attributions = (responseData.attributions as any[]) || []
+            }
+            
+            const userAttributions = attributions.filter((attr: any) => 
+              attr.userId === parseInt(u.id) || attr.user?.id === parseInt(u.id)
+            )
+            
+            if (userAttributions.length > 0) {
+              const activeAttribution = userAttributions[0]
+              assignedPhone = activeAttribution.phoneModel || activeAttribution.phone?.model
+              assignedSim = activeAttribution.simCardNumber || activeAttribution.simCard?.number
+            }
+          }
+        } catch (error) {
+          console.error(`Error fetching assignments for user ${u.name}:`, error)
+        }
+        
+        return {
+          name: (u.name || `${u.firstName ?? ""} ${u.lastName ?? ""}`).trim(),
+          email: u.email ?? "",
+          department: u.department ?? "",
+          position: u.position ?? "",
+          status: ((u.status === "ACTIVE" || u.status === "active") ? "Actif" : "Inactif"),
+          joinDate: u.joinDate ?? u.createdAt ?? "",
+          phone: u.phone ?? "",
+          address: u.address ?? "",
+          manager: u.manager ?? "",
+          assignedPhone: assignedPhone ?? "",
+          assignedSim: assignedSim ?? "",
+        }
+      }))
+      
+      // Créer un fichier Excel stylé avec ExcelJS
+      const workbook = new ExcelJS.Workbook()
+      const worksheet = workbook.addWorksheet('Utilisateurs')
+      
+      // Définir les couleurs pour les départements
+      const departmentColors: { [key: string]: string } = {
+        "IT": "E6F3FF", // Bleu clair
+        "RH": "E6FFE6", // Vert clair
+        "Finance": "FFF2E6", // Orange clair
+        "Marketing": "F0E6FF", // Violet clair
+        "Sales": "FFE6E6", // Rouge clair
+        "Operations": "E6FFFF", // Cyan clair
+      }
+      
+             // Définir les colonnes avec largeurs (exactement comme affiché dans la page)
+       worksheet.columns = [
+         { header: 'Nom', key: 'name', width: 25 },
+         { header: 'Email', key: 'email', width: 30 },
+         { header: 'Département', key: 'department', width: 20 },
+         { header: 'Poste', key: 'position', width: 20 },
+         { header: 'Statut', key: 'status', width: 12 },
+         { header: 'Téléphone', key: 'assignedPhone', width: 18 },
+         { header: 'SIM', key: 'assignedSim', width: 18 },
+         { header: 'Date d\'arrivée', key: 'joinDate', width: 15 }
+       ]
+      
+      // Styliser l'en-tête
+      const headerRow = worksheet.getRow(1)
+      headerRow.height = 30
+      headerRow.eachCell((cell) => {
+        cell.fill = {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: { argb: 'FF4F81BD' } // Bleu foncé
+        }
+        cell.font = {
+          bold: true,
+          color: { argb: 'FFFFFFFF' }, // Blanc
+          size: 12
+        }
+        cell.alignment = {
+          horizontal: 'center',
+          vertical: 'middle'
+        }
+        cell.border = {
+          top: { style: 'thin', color: { argb: 'FF2E5C8A' } },
+          left: { style: 'thin', color: { argb: 'FF2E5C8A' } },
+          bottom: { style: 'thin', color: { argb: 'FF2E5C8A' } },
+          right: { style: 'thin', color: { argb: 'FF2E5C8A' } }
+        }
+      })
+      
+      // Ajouter les données avec style
+      exportUsers.forEach((user, index) => {
+                 const row = worksheet.addRow({
+           name: user.name,
+           email: user.email,
+           department: user.department,
+           position: user.position,
+           status: user.status,
+           assignedPhone: user.assignedPhone || '-',
+           assignedSim: user.assignedSim || '-',
+           joinDate: user.joinDate
+         })
+        
+        // Styliser la ligne
+        row.height = 25
+        
+        // Couleur alternée pour les lignes
+        if (index % 2 === 0) {
+          row.eachCell((cell) => {
+            cell.fill = {
+              type: 'pattern',
+              pattern: 'solid',
+              fgColor: { argb: 'FFF8F9FA' } // Gris très clair
+            }
+          })
+        }
+        
+        // Styliser la cellule de département
+        const departmentCell = row.getCell('department')
+        const departmentColor = departmentColors[user.department] || 'FFFFFF'
+        departmentCell.fill = {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: { argb: `FF${departmentColor}` }
+        }
+        departmentCell.font = { bold: true }
+        departmentCell.alignment = { horizontal: 'center' }
+        
+        // Styliser la cellule de statut
+        const statusCell = row.getCell('status')
+        statusCell.fill = {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: { argb: user.status === 'Actif' ? 'FFE6FFE6' : 'FFFFE6E6' }
+        }
+        statusCell.font = { bold: true }
+        statusCell.alignment = { horizontal: 'center' }
+        
+        // Styliser les autres cellules
+        row.eachCell((cell) => {
+          cell.border = {
+            top: { style: 'thin', color: { argb: 'FFCCCCCC' } },
+            left: { style: 'thin', color: { argb: 'FFCCCCCC' } },
+            bottom: { style: 'thin', color: { argb: 'FFCCCCCC' } },
+            right: { style: 'thin', color: { argb: 'FFCCCCCC' } }
+          }
+          cell.alignment = { vertical: 'middle' }
+        })
+      })
+      
+      // Ajouter un titre stylé
+      worksheet.insertRow(1, ['👥 INVENTAIRE DES UTILISATEURS'])
+      const titleRow = worksheet.getRow(1)
+      titleRow.height = 40
+      titleRow.getCell(1).font = {
+        bold: true,
+        size: 16,
+        color: { argb: 'FF4F81BD' }
+      }
+      titleRow.getCell(1).alignment = { horizontal: 'center' }
+             worksheet.mergeCells('A1:H1')
+      
+      // Ajouter des statistiques
+      const statsRow = worksheet.addRow([])
+      statsRow.height = 30
+      const activeUsers = exportUsers.filter(u => u.status === 'Actif').length
+      const usersWithPhone = exportUsers.filter(u => u.assignedPhone).length
+      const usersWithSim = exportUsers.filter(u => u.assignedSim).length
+      
+      statsRow.getCell(1).value = `📊 Statistiques: ${exportUsers.length} utilisateurs total, ${activeUsers} actifs, ${usersWithPhone} avec téléphone assigné, ${usersWithSim} avec carte SIM assignée`
+      statsRow.getCell(1).font = { bold: true, color: { argb: 'FF666666' } }
+      statsRow.getCell(1).alignment = { horizontal: 'center' }
+             worksheet.mergeCells(`A${statsRow.number}:H${statsRow.number}`)
+      
+      // Générer le fichier Excel
+      const buffer = await workbook.xlsx.writeBuffer()
+      const blob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" })
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement("a")
+      a.href = url
+      a.download = `utilisateurs_${new Date().toISOString().split('T')[0]}.xlsx`
+      a.click()
+      window.URL.revokeObjectURL(url)
+
+      toast({
+        title: "Export réussi",
+        description: `${exportUsers.length} utilisateurs ont été exportés en Excel avec style.`,
+      })
+      
+    } catch (err: any) {
+      console.error("Error exporting users:", err)
+      toast({
+        title: "Erreur d'export",
+        description: "Erreur lors de l'export des utilisateurs.",
+        variant: "destructive",
+      })
+    } finally {
+      setLoading(false)
+    }
+  }
+
   const userColumns = [
     { key: "name", label: "Nom" },
     { key: "email", label: "Email" },
@@ -429,6 +685,25 @@ export default function AssignerUsersPage() {
                        <option value="active">Actif</option>
                        <option value="inactive">Inactif</option>
                      </select>
+                     <Button 
+                       variant="outline" 
+                       onClick={handleExport} 
+                       disabled={loading}
+                       className="relative overflow-hidden group hover:bg-blue-50 transition-all duration-300"
+                     >
+                       {loading ? (
+                         <div className="flex items-center">
+                           <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600 mr-2"></div>
+                           <span>Export en cours...</span>
+                         </div>
+                       ) : (
+                         <div className="flex items-center">
+                           <Download className="h-4 w-4 mr-2 group-hover:animate-bounce transition-all duration-300" />
+                           <span>Exporter Excel</span>
+                           <div className="absolute inset-0 bg-gradient-to-r from-blue-500/0 via-blue-500/20 to-blue-500/0 transform -skew-x-12 -translate-x-full group-hover:translate-x-full transition-transform duration-1000"></div>
+                         </div>
+                       )}
+                     </Button>
                      <div className="text-sm text-gray-500 bg-blue-50 px-3 py-2 rounded-lg">
                        Mode consultation uniquement
                      </div>

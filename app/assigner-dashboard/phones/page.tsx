@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { Search, Bell, Globe, Phone, User, Eye, ChevronLeft, ChevronRight } from "lucide-react"
+import { Search, Bell, Globe, Phone, User, Eye, ChevronLeft, ChevronRight, Download } from "lucide-react"
 import { Pagination, PaginationContent, PaginationItem, PaginationLink, PaginationNext, PaginationPrevious } from "@/components/ui/pagination"
 import { Sidebar } from "@/components/sidebar"
 import { DataTable } from "@/components/data-table"
@@ -15,6 +15,7 @@ import { PhoneManagementApi } from "@/api/generated/apis/phone-management-api"
 import { getApiConfig } from "@/lib/apiClient"
 import { useUser } from "@/contexts/UserContext"
 import { PhoneDto } from "@/api/generated/models"
+import ExcelJS from 'exceljs'
 
 interface PhoneDevice {
   id: string
@@ -296,6 +297,241 @@ export default function AssignerPhonesPage() {
     setPagination(prev => ({ ...prev, page: 1, limit: newLimit }))
   }
 
+  const handleExport = async () => {
+    try {
+      setLoading(true)
+      
+      const token = localStorage.getItem("jwt_token")
+      if (!token) {
+        toast({
+          title: "Erreur",
+          description: "Token d'authentification manquant",
+          variant: "destructive",
+        })
+        return
+      }
+
+      const api = new PhoneManagementApi(getApiConfig(token))
+      
+      // Récupérer tous les téléphones (sans pagination)
+      const res = await api.getPhones(1, 10000) // Limite très élevée pour récupérer tous les téléphones
+      const body: any = res.data as any
+      
+      // Traiter la réponse
+      let apiPhones: any[] = []
+      if (body) {
+        if (Array.isArray(body)) {
+          apiPhones = body
+        } else if (body.data && body.data.phones && Array.isArray(body.data.phones)) {
+          apiPhones = body.data.phones
+        } else if (body.content && Array.isArray(body.content)) {
+          apiPhones = body.content
+        } else if (body.phones && Array.isArray(body.phones)) {
+          apiPhones = body.phones
+        } else if (body.data && Array.isArray(body.data)) {
+          apiPhones = body.data
+        } else {
+          console.warn("Unexpected response format:", body)
+          apiPhones = []
+        }
+      }
+      
+      // Mapper les téléphones pour l'export
+      const exportPhones = apiPhones.map((p: any) => ({
+        model: p.model ?? "",
+        brand: p.brand ?? "",
+        imei: p.imei ?? "",
+        serialNumber: p.serialNumber ?? "",
+        status: p.status ?? "",
+        assignedTo: p.assignedTo ?? p.assignedToUser?.name ?? "",
+        assignedDate: p.assignedDate ?? "",
+        purchaseDate: p.purchaseDate ?? p.createdAt ?? "",
+        warrantyExpiry: p.warrantyExpiry ?? "",
+        condition: p.condition ?? "",
+        storage: p.storage ?? "",
+        color: p.color ?? "",
+        price: p.price ?? 0,
+        notes: p.notes ?? "",
+      }))
+      
+      // Créer un fichier Excel stylé avec ExcelJS
+      const workbook = new ExcelJS.Workbook()
+      const worksheet = workbook.addWorksheet('Téléphones')
+      
+      // Définir les couleurs pour les statuts
+      const statusColors: { [key: string]: string } = {
+        "AVAILABLE": "E6FFE6", // Vert clair
+        "ASSIGNED": "E6F3FF", // Bleu clair
+        "LOST": "FFE6CC", // Orange clair
+        "DAMAGED": "FFE6E6", // Rouge clair
+      }
+      
+      // Définir les couleurs pour les conditions
+      const conditionColors: { [key: string]: string } = {
+        "excellent": "E6FFE6", // Vert clair
+        "good": "E6F3FF", // Bleu clair
+        "fair": "FFF2E6", // Orange clair
+        "poor": "FFE6E6", // Rouge clair
+      }
+      
+             // Définir les colonnes avec largeurs (exactement comme affiché dans la page)
+       worksheet.columns = [
+         { header: 'Modèle', key: 'model', width: 20 },
+         { header: 'Marque', key: 'brand', width: 15 },
+         { header: 'Stockage', key: 'storage', width: 12 },
+         { header: 'Couleur', key: 'color', width: 12 },
+         { header: 'Statut', key: 'status', width: 12 },
+         { header: 'Assigné à', key: 'assignedTo', width: 20 },
+         { header: 'État', key: 'condition', width: 12 },
+         { header: 'Prix', key: 'price', width: 12 },
+         { header: 'Date d\'achat', key: 'purchaseDate', width: 15 }
+       ]
+      
+      // Styliser l'en-tête
+      const headerRow = worksheet.getRow(1)
+      headerRow.height = 30
+      headerRow.eachCell((cell) => {
+        cell.fill = {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: { argb: 'FF4F81BD' } // Bleu foncé
+        }
+        cell.font = {
+          bold: true,
+          color: { argb: 'FFFFFFFF' }, // Blanc
+          size: 12
+        }
+        cell.alignment = {
+          horizontal: 'center',
+          vertical: 'middle'
+        }
+        cell.border = {
+          top: { style: 'thin', color: { argb: 'FF2E5C8A' } },
+          left: { style: 'thin', color: { argb: 'FF2E5C8A' } },
+          bottom: { style: 'thin', color: { argb: 'FF2E5C8A' } },
+          right: { style: 'thin', color: { argb: 'FF2E5C8A' } }
+        }
+      })
+      
+      // Ajouter les données avec style
+      exportPhones.forEach((phone, index) => {
+        const row = worksheet.addRow({
+          model: phone.model,
+          brand: phone.brand,
+          storage: phone.storage,
+          color: phone.color,
+          status: phone.status,
+          assignedTo: phone.assignedTo || '-',
+          condition: phone.condition,
+          price: phone.price,
+          purchaseDate: phone.purchaseDate
+        })
+        
+        // Styliser la ligne
+        row.height = 25
+        
+        // Couleur alternée pour les lignes
+        if (index % 2 === 0) {
+          row.eachCell((cell) => {
+            cell.fill = {
+              type: 'pattern',
+              pattern: 'solid',
+              fgColor: { argb: 'FFF8F9FA' } // Gris très clair
+            }
+          })
+        }
+        
+        // Styliser la cellule de statut
+        const statusCell = row.getCell('status')
+        const statusColor = statusColors[phone.status] || 'FFFFFF'
+        statusCell.fill = {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: { argb: `FF${statusColor}` }
+        }
+        statusCell.font = { bold: true }
+        statusCell.alignment = { horizontal: 'center' }
+        
+        // Styliser la cellule de condition
+        const conditionCell = row.getCell('condition')
+        const conditionColor = conditionColors[phone.condition] || 'FFFFFF'
+        conditionCell.fill = {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: { argb: `FF${conditionColor}` }
+        }
+        conditionCell.font = { bold: true }
+        conditionCell.alignment = { horizontal: 'center' }
+        
+        // Styliser la cellule de prix
+        const priceCell = row.getCell('price')
+        priceCell.numFmt = 'MAD #,##0.00'
+        priceCell.font = { bold: true }
+        priceCell.alignment = { horizontal: 'right' }
+        
+        // Styliser les autres cellules
+        row.eachCell((cell) => {
+          cell.border = {
+            top: { style: 'thin', color: { argb: 'FFCCCCCC' } },
+            left: { style: 'thin', color: { argb: 'FFCCCCCC' } },
+            bottom: { style: 'thin', color: { argb: 'FFCCCCCC' } },
+            right: { style: 'thin', color: { argb: 'FFCCCCCC' } }
+          }
+          cell.alignment = { vertical: 'middle' }
+        })
+      })
+      
+      // Ajouter un titre stylé
+      worksheet.insertRow(1, ['📱 INVENTAIRE DES TÉLÉPHONES'])
+      const titleRow = worksheet.getRow(1)
+      titleRow.height = 40
+      titleRow.getCell(1).font = {
+        bold: true,
+        size: 16,
+        color: { argb: 'FF4F81BD' }
+      }
+      titleRow.getCell(1).alignment = { horizontal: 'center' }
+             worksheet.mergeCells('A1:I1')
+      
+      // Ajouter des statistiques
+      const statsRow = worksheet.addRow([])
+      statsRow.height = 30
+      const availablePhones = exportPhones.filter(p => p.status === 'AVAILABLE').length
+      const assignedPhones = exportPhones.filter(p => p.status === 'ASSIGNED').length
+      const totalValue = exportPhones.reduce((sum, p) => sum + (p.price || 0), 0)
+      
+      statsRow.getCell(1).value = `📊 Statistiques: ${exportPhones.length} téléphones total, ${availablePhones} disponibles, ${assignedPhones} assignés, Valeur totale: ${totalValue.toLocaleString('fr-FR')} MAD`
+      statsRow.getCell(1).font = { bold: true, color: { argb: 'FF666666' } }
+      statsRow.getCell(1).alignment = { horizontal: 'center' }
+             worksheet.mergeCells(`A${statsRow.number}:I${statsRow.number}`)
+      
+      // Générer le fichier Excel
+      const buffer = await workbook.xlsx.writeBuffer()
+      const blob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" })
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement("a")
+      a.href = url
+      a.download = `telephones_${new Date().toISOString().split('T')[0]}.xlsx`
+      a.click()
+      window.URL.revokeObjectURL(url)
+
+      toast({
+        title: "Export réussi",
+        description: `${exportPhones.length} téléphones ont été exportés en Excel avec style.`,
+      })
+      
+    } catch (err: any) {
+      console.error("Error exporting phones:", err)
+      toast({
+        title: "Erreur d'export",
+        description: "Erreur lors de l'export des téléphones.",
+        variant: "destructive",
+      })
+    } finally {
+      setLoading(false)
+    }
+  }
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100">
       <div className="flex">
@@ -370,6 +606,25 @@ export default function AssignerPhonesPage() {
                       <option value="lost">Perdu</option>
                       <option value="damaged">Endommagé</option>
                     </select>
+                    <Button 
+                      variant="outline" 
+                      onClick={handleExport} 
+                      disabled={loading}
+                      className="relative overflow-hidden group hover:bg-blue-50 transition-all duration-300"
+                    >
+                      {loading ? (
+                        <div className="flex items-center">
+                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600 mr-2"></div>
+                          <span>Export en cours...</span>
+                        </div>
+                      ) : (
+                        <div className="flex items-center">
+                          <Download className="h-4 w-4 mr-2 group-hover:animate-bounce transition-all duration-300" />
+                          <span>Exporter Excel</span>
+                          <div className="absolute inset-0 bg-gradient-to-r from-blue-500/0 via-blue-500/20 to-blue-500/0 transform -skew-x-12 -translate-x-full group-hover:translate-x-full transition-transform duration-1000"></div>
+                        </div>
+                      )}
+                    </Button>
                     <div className="text-sm text-gray-500 bg-blue-50 px-3 py-2 rounded-lg">
                       <Eye className="h-4 w-4 inline mr-2" />
                       Mode consultation uniquement

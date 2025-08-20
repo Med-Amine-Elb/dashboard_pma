@@ -28,6 +28,7 @@ import {
   ChevronRight,
   Globe,
   Bell,
+  Download,
 } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { AttributionManagementApi } from "@/api/generated/apis/attribution-management-api"
@@ -37,6 +38,7 @@ import { getApiConfig } from "@/lib/apiClient"
 import { useUser } from "@/contexts/UserContext"
 import { AttributionDto } from "@/api/generated/models"
 import axios from "axios"
+import ExcelJS from 'exceljs'
 import { Pagination, PaginationContent, PaginationItem, PaginationLink, PaginationNext, PaginationPrevious } from "@/components/ui/pagination"
 
 interface Attribution {
@@ -505,6 +507,202 @@ export default function AssignerAttributionsPage() {
     setPagination(prev => ({ ...prev, page: 1, limit: newLimit }))
   }
 
+  const handleExport = async () => {
+    try {
+      setLoading(true)
+      
+      const token = localStorage.getItem("jwt_token")
+      if (!token) {
+        toast({
+          title: "Erreur",
+          description: "Token d'authentification manquant",
+          variant: "destructive",
+        })
+        return
+      }
+
+      const api = new AttributionManagementApi(getApiConfig(token))
+      
+      // Récupérer toutes les attributions (sans pagination)
+      const res = await api.getAttributions(1, 10000) // Limite très élevée pour récupérer toutes les attributions
+      const body: any = res.data as any
+      
+      // Traiter la réponse
+      let apiAttributions: any[] = []
+      if (body) {
+        if (Array.isArray(body)) {
+          apiAttributions = body
+        } else if (body.data && body.data.attributions && Array.isArray(body.data.attributions)) {
+          apiAttributions = body.data.attributions
+        } else if (body.content && Array.isArray(body.content)) {
+          apiAttributions = body.content
+        } else if (body.attributions && Array.isArray(body.attributions)) {
+          apiAttributions = body.attributions
+        } else if (body.data && Array.isArray(body.data)) {
+          apiAttributions = body.data
+        } else {
+          console.warn("Unexpected response format:", body)
+          apiAttributions = []
+        }
+      }
+      
+      // Mapper les attributions pour l'export
+      const exportAttributions = apiAttributions.map((a: any) => ({
+        userName: a.userName ?? a.user?.name ?? "",
+        userEmail: a.userEmail ?? a.user?.email ?? "",
+        phoneModel: a.phoneModel ?? a.phone?.model ?? "",
+        simCardNumber: a.simCardNumber ?? a.simCard?.number ?? "",
+        assignedBy: a.assignedByName ?? a.assignedBy ?? a.assignedByUser?.name ?? a.createdBy?.name ?? "Admin",
+        assignmentDate: a.assignmentDate ?? a.createdAt ?? "",
+        status: a.status ?? "",
+      }))
+      
+      // Créer un fichier Excel stylé avec ExcelJS
+      const workbook = new ExcelJS.Workbook()
+      const worksheet = workbook.addWorksheet('Attributions')
+      
+      // Définir les couleurs pour les statuts
+      const statusColors: { [key: string]: string } = {
+        "ACTIVE": "E6FFE6", // Vert clair
+        "PENDING": "FFF2E6", // Orange clair
+        "RETURNED": "F0F0F0", // Gris clair
+      }
+      
+             // Définir les colonnes avec largeurs (exactement comme affiché dans la page)
+       worksheet.columns = [
+         { header: 'Utilisateur', key: 'userName', width: 20 },
+         { header: 'Téléphone', key: 'phoneModel', width: 20 },
+         { header: 'Carte SIM', key: 'simCardNumber', width: 18 },
+         { header: 'Date d\'attribution', key: 'assignmentDate', width: 18 },
+         { header: 'Statut', key: 'status', width: 12 },
+         { header: 'Assigné par', key: 'assignedBy', width: 20 }
+       ]
+      
+      // Styliser l'en-tête
+      const headerRow = worksheet.getRow(1)
+      headerRow.height = 30
+      headerRow.eachCell((cell) => {
+        cell.fill = {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: { argb: 'FF4F81BD' } // Bleu foncé
+        }
+        cell.font = {
+          bold: true,
+          color: { argb: 'FFFFFFFF' }, // Blanc
+          size: 12
+        }
+        cell.alignment = {
+          horizontal: 'center',
+          vertical: 'middle'
+        }
+        cell.border = {
+          top: { style: 'thin', color: { argb: 'FF2E5C8A' } },
+          left: { style: 'thin', color: { argb: 'FF2E5C8A' } },
+          bottom: { style: 'thin', color: { argb: 'FF2E5C8A' } },
+          right: { style: 'thin', color: { argb: 'FF2E5C8A' } }
+        }
+      })
+      
+      // Ajouter les données avec style
+      exportAttributions.forEach((attribution, index) => {
+                 const row = worksheet.addRow({
+           userName: attribution.userName,
+           phoneModel: attribution.phoneModel || '-',
+           simCardNumber: attribution.simCardNumber || '-',
+           assignmentDate: attribution.assignmentDate,
+           status: attribution.status,
+           assignedBy: attribution.assignedBy
+         })
+        
+        // Styliser la ligne
+        row.height = 25
+        
+        // Couleur alternée pour les lignes
+        if (index % 2 === 0) {
+          row.eachCell((cell) => {
+            cell.fill = {
+              type: 'pattern',
+              pattern: 'solid',
+              fgColor: { argb: 'FFF8F9FA' } // Gris très clair
+            }
+          })
+        }
+        
+        // Styliser la cellule de statut
+        const statusCell = row.getCell('status')
+        const statusColor = statusColors[attribution.status] || 'FFFFFF'
+        statusCell.fill = {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: { argb: `FF${statusColor}` }
+        }
+        statusCell.font = { bold: true }
+        statusCell.alignment = { horizontal: 'center' }
+        
+        // Styliser les autres cellules
+        row.eachCell((cell) => {
+          cell.border = {
+            top: { style: 'thin', color: { argb: 'FFCCCCCC' } },
+            left: { style: 'thin', color: { argb: 'FFCCCCCC' } },
+            bottom: { style: 'thin', color: { argb: 'FFCCCCCC' } },
+            right: { style: 'thin', color: { argb: 'FFCCCCCC' } }
+          }
+          cell.alignment = { vertical: 'middle' }
+        })
+      })
+      
+      // Ajouter un titre stylé
+      worksheet.insertRow(1, ['🔗 INVENTAIRE DES ATTRIBUTIONS'])
+      const titleRow = worksheet.getRow(1)
+      titleRow.height = 40
+      titleRow.getCell(1).font = {
+        bold: true,
+        size: 16,
+        color: { argb: 'FF4F81BD' }
+      }
+      titleRow.getCell(1).alignment = { horizontal: 'center' }
+             worksheet.mergeCells('A1:F1')
+      
+      // Ajouter des statistiques
+      const statsRow = worksheet.addRow([])
+      statsRow.height = 30
+      const activeAttributions = exportAttributions.filter(a => a.status === 'ACTIVE').length
+      const pendingAttributions = exportAttributions.filter(a => a.status === 'PENDING').length
+      const returnedAttributions = exportAttributions.filter(a => a.status === 'RETURNED').length
+      
+      statsRow.getCell(1).value = `📊 Statistiques: ${exportAttributions.length} attributions total, ${activeAttributions} actives, ${pendingAttributions} en attente, ${returnedAttributions} retournées`
+      statsRow.getCell(1).font = { bold: true, color: { argb: 'FF666666' } }
+      statsRow.getCell(1).alignment = { horizontal: 'center' }
+             worksheet.mergeCells(`A${statsRow.number}:F${statsRow.number}`)
+      
+      // Générer le fichier Excel
+      const buffer = await workbook.xlsx.writeBuffer()
+      const blob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" })
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement("a")
+      a.href = url
+      a.download = `attributions_${new Date().toISOString().split('T')[0]}.xlsx`
+      a.click()
+      window.URL.revokeObjectURL(url)
+
+      toast({
+        title: "Export réussi",
+        description: `${exportAttributions.length} attributions ont été exportées en Excel avec style.`,
+      })
+      
+    } catch (err: any) {
+      console.error("Error exporting attributions:", err)
+      toast({
+        title: "Erreur d'export",
+        description: "Erreur lors de l'export des attributions.",
+        variant: "destructive",
+      })
+    } finally {
+      setLoading(false)
+    }
+  }
+
   const getPageNumbers = () => {
     const pages: number[] = []
     const maxToShow = 5
@@ -573,10 +771,31 @@ export default function AssignerAttributionsPage() {
               <h1 className="text-3xl font-bold text-gray-900">Attributions</h1>
               <p className="text-gray-600 mt-2">Gérez les attributions de téléphones et cartes SIM</p>
             </div>
-            <Button onClick={() => setShowModal(true)} className="bg-blue-600 hover:bg-blue-700">
-              <Plus className="h-4 w-4 mr-2" />
-              Nouvelle Attribution
-            </Button>
+            <div className="flex items-center space-x-4">
+              <Button 
+                variant="outline" 
+                onClick={handleExport} 
+                disabled={loading}
+                className="relative overflow-hidden group hover:bg-blue-50 transition-all duration-300"
+              >
+                {loading ? (
+                  <div className="flex items-center">
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600 mr-2"></div>
+                    <span>Export en cours...</span>
+                  </div>
+                ) : (
+                  <div className="flex items-center">
+                    <Download className="h-4 w-4 mr-2 group-hover:animate-bounce transition-all duration-300" />
+                    <span>Exporter Excel</span>
+                    <div className="absolute inset-0 bg-gradient-to-r from-blue-500/0 via-blue-500/20 to-blue-500/0 transform -skew-x-12 -translate-x-full group-hover:translate-x-full transition-transform duration-1000"></div>
+                  </div>
+                )}
+              </Button>
+              <Button onClick={() => setShowModal(true)} className="bg-blue-600 hover:bg-blue-700">
+                <Plus className="h-4 w-4 mr-2" />
+                Nouvelle Attribution
+              </Button>
+            </div>
           </div>
 
           {/* Search and Filters */}
