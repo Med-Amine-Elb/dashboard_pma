@@ -16,6 +16,7 @@ import { useToast } from "@/hooks/use-toast"
 import { SIMCardManagementApi } from "@/api/generated";
 import { getApiConfig } from "@/lib/apiClient";
 import { useUser } from "@/contexts/UserContext";
+import ExcelJS from 'exceljs';
 
 interface SimCard {
   id: string
@@ -398,48 +399,253 @@ export default function SimCardsPage() {
     }
   };
 
-  const handleExport = () => {
-    const csvContent = [
-      [
-        "Numéro",
-        "Opérateur",
-        "Forfait",
-        "Statut",
-        "Date activation",
-        "Date expiration",
-        "Coût mensuel",
-        "ICCID",
-        "PIN",
-        "PUK",
-      ],
-      ...filteredSimCards.map((sim) => [
-        sim.number,
-        sim.carrier,
-        sim.plan,
-        sim.status,
-        sim.activationDate,
-        sim.expiryDate,
-        sim.monthlyFee.toString(),
-        sim.iccid,
-        sim.pin,
-        sim.puk,
-      ]),
-    ]
-      .map((row) => row.join(","))
-      .join("\n")
+  const handleExport = async () => {
+    try {
+      setLoading(true)
+      
+      const token = localStorage.getItem("jwt_token")
+      if (!token) {
+        toast({
+          title: "Erreur",
+          description: "Token d'authentification manquant",
+          variant: "destructive",
+        })
+        return
+      }
 
-    const blob = new Blob([csvContent], { type: "text/csv" })
-    const url = window.URL.createObjectURL(blob)
-    const a = document.createElement("a")
-    a.href = url
-    a.download = "cartes-sim.csv"
-    a.click()
-    window.URL.revokeObjectURL(url)
+      const api = new SIMCardManagementApi(getApiConfig(token))
+      
+      // Récupérer toutes les cartes SIM (sans pagination)
+      const res = await api.getSimCards(1, 10000) // Limite très élevée pour récupérer toutes les cartes SIM
+      const body: any = res.data as any
+      
+      // Traiter la réponse comme dans fetchSimCards
+      let apiSimCards: any[] = []
+      if (body) {
+        if (Array.isArray(body)) {
+          apiSimCards = body
+        } else if (
+          body.data && typeof body.data === 'object' &&
+          body.data.simcards && Array.isArray(body.data.simcards)
+        ) {
+          apiSimCards = body.data.simcards
+        } else if (
+          body && typeof body === 'object' &&
+          body.simcards && Array.isArray(body.simcards)
+        ) {
+          apiSimCards = body.simcards
+        } else if (body.content && Array.isArray(body.content)) {
+          apiSimCards = body.content
+        } else if (body.data && Array.isArray(body.data)) {
+          apiSimCards = body.data
+        } else {
+          console.warn("Unexpected response format:", body)
+          apiSimCards = []
+        }
+      }
+      
+      console.log("API Response body:", body) // Debug log
+      console.log("Processed sim cards:", apiSimCards) // Debug log
+      
+      // Mapper les cartes SIM pour l'export
+      const exportSimCards = apiSimCards.map((s: any) => ({
+        number: s.number ?? "",
+        carrier: s.carrier ?? "",
+        plan: s.plan ?? "",
+        status: s.status ?? "",
+        activationDate: s.activationDate ?? s.createdAt ?? "",
+        expiryDate: s.expiryDate ?? "",
+        monthlyFee: s.monthlyFee ?? 0,
+        dataLimit: s.dataLimit ?? "",
+        iccid: s.iccid ?? "",
+        pin: s.pin ?? "",
+        puk: s.puk ?? "",
+        notes: s.notes ?? "",
+      }))
+      
+      console.log("Export sim cards:", exportSimCards) // Debug log
+      
+      // Créer un fichier Excel stylé avec ExcelJS
+      const workbook = new ExcelJS.Workbook()
+      const worksheet = workbook.addWorksheet('Cartes SIM')
+      
+      // Définir les couleurs pour les statuts
+      const statusColors: { [key: string]: string } = {
+        "AVAILABLE": "E6FFE6", // Vert clair
+        "ASSIGNED": "E6F3FF", // Bleu clair
+        "LOST": "FFE6E6", // Rouge clair
+        "BLOCKED": "FFE6CC", // Orange clair
+      }
+      
+      // Définir les couleurs pour les opérateurs
+      const carrierColors: { [key: string]: string } = {
+        "Orange": "FFA500", // Orange
+        "Maroc Telecom": "FF6B35", // Orange foncé
+        "Inwi": "00CED1", // Cyan
+      }
+      
+      // Définir les colonnes avec largeurs
+      worksheet.columns = [
+        { header: 'Numéro', key: 'number', width: 18 },
+        { header: 'Opérateur', key: 'carrier', width: 15 },
+        { header: 'Forfait', key: 'plan', width: 20 },
+        { header: 'Statut', key: 'status', width: 12 },
+        { header: 'Date activation', key: 'activationDate', width: 15 },
+        { header: 'Date expiration', key: 'expiryDate', width: 15 },
+        { header: 'Coût mensuel (MAD)', key: 'monthlyFee', width: 15 },
+        { header: 'Limite données', key: 'dataLimit', width: 15 },
+        { header: 'ICCID', key: 'iccid', width: 25 },
+        { header: 'PIN', key: 'pin', width: 10 },
+        { header: 'PUK', key: 'puk', width: 10 },
+        { header: 'Notes', key: 'notes', width: 30 }
+      ]
+      
+      // Styliser l'en-tête
+      const headerRow = worksheet.getRow(1)
+      headerRow.height = 30
+      headerRow.eachCell((cell) => {
+        cell.fill = {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: { argb: 'FF4F81BD' } // Bleu foncé
+        }
+        cell.font = {
+          bold: true,
+          color: { argb: 'FFFFFFFF' }, // Blanc
+          size: 12
+        }
+        cell.alignment = {
+          horizontal: 'center',
+          vertical: 'middle'
+        }
+        cell.border = {
+          top: { style: 'thin', color: { argb: 'FF2E5C8A' } },
+          left: { style: 'thin', color: { argb: 'FF2E5C8A' } },
+          bottom: { style: 'thin', color: { argb: 'FF2E5C8A' } },
+          right: { style: 'thin', color: { argb: 'FF2E5C8A' } }
+        }
+      })
+      
+      // Ajouter les données avec style
+      exportSimCards.forEach((sim, index) => {
+        const row = worksheet.addRow({
+          number: sim.number,
+          carrier: sim.carrier,
+          plan: sim.plan,
+          status: sim.status,
+          activationDate: sim.activationDate,
+          expiryDate: sim.expiryDate,
+          monthlyFee: sim.monthlyFee,
+          dataLimit: sim.dataLimit,
+          iccid: sim.iccid,
+          pin: sim.pin,
+          puk: sim.puk,
+          notes: sim.notes || '-'
+        })
+        
+        // Styliser la ligne
+        row.height = 25
+        
+        // Couleur alternée pour les lignes
+        if (index % 2 === 0) {
+          row.eachCell((cell) => {
+            cell.fill = {
+              type: 'pattern',
+              pattern: 'solid',
+              fgColor: { argb: 'FFF8F9FA' } // Gris très clair
+            }
+          })
+        }
+        
+        // Styliser la cellule de statut
+        const statusCell = row.getCell('status')
+        const statusColor = statusColors[sim.status] || 'FFFFFF'
+        statusCell.fill = {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: { argb: `FF${statusColor}` }
+        }
+        statusCell.font = { bold: true }
+        statusCell.alignment = { horizontal: 'center' }
+        
+        // Styliser la cellule d'opérateur
+        const carrierCell = row.getCell('carrier')
+        const carrierColor = carrierColors[sim.carrier] || 'FFFFFF'
+        carrierCell.fill = {
+          type: 'pattern',
+          pattern: 'solid',
+          fgColor: { argb: `FF${carrierColor}` }
+        }
+        carrierCell.font = { bold: true, color: { argb: 'FFFFFFFF' } }
+        carrierCell.alignment = { horizontal: 'center' }
+        
+        // Styliser la cellule de coût mensuel
+        const feeCell = row.getCell('monthlyFee')
+        feeCell.numFmt = 'MAD #,##0.00'
+        feeCell.font = { bold: true }
+        feeCell.alignment = { horizontal: 'right' }
+        
+        // Styliser les autres cellules
+        row.eachCell((cell) => {
+          cell.border = {
+            top: { style: 'thin', color: { argb: 'FFCCCCCC' } },
+            left: { style: 'thin', color: { argb: 'FFCCCCCC' } },
+            bottom: { style: 'thin', color: { argb: 'FFCCCCCC' } },
+            right: { style: 'thin', color: { argb: 'FFCCCCCC' } }
+          }
+          cell.alignment = { vertical: 'middle' }
+        })
+      })
+      
+      // Ajouter un titre stylé
+      worksheet.insertRow(1, ['📱 INVENTAIRE DES CARTES SIM'])
+      const titleRow = worksheet.getRow(1)
+      titleRow.height = 40
+      titleRow.getCell(1).font = {
+        bold: true,
+        size: 16,
+        color: { argb: 'FF4F81BD' }
+      }
+      titleRow.getCell(1).alignment = { horizontal: 'center' }
+      worksheet.mergeCells('A1:L1')
+      
+      // Ajouter des statistiques
+      const statsRow = worksheet.addRow([])
+      statsRow.height = 30
+      const availableSims = exportSimCards.filter(s => s.status === 'AVAILABLE').length
+      const assignedSims = exportSimCards.filter(s => s.status === 'ASSIGNED').length
+      const totalMonthlyCost = exportSimCards.reduce((sum, s) => sum + (s.monthlyFee || 0), 0)
+      
+      statsRow.getCell(1).value = `📊 Statistiques: ${exportSimCards.length} cartes SIM total, ${availableSims} disponibles, ${assignedSims} assignées, Coût mensuel total: ${totalMonthlyCost.toLocaleString('fr-FR')} MAD`
+      statsRow.getCell(1).font = { bold: true, color: { argb: 'FF666666' } }
+      statsRow.getCell(1).alignment = { horizontal: 'center' }
+      worksheet.mergeCells(`A${statsRow.number}:L${statsRow.number}`)
+      
+      // Générer le fichier Excel
+      const buffer = await workbook.xlsx.writeBuffer()
+      const blob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" })
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement("a")
+      a.href = url
+      a.download = `cartes-sim_${new Date().toISOString().split('T')[0]}.xlsx`
+      a.click()
+      window.URL.revokeObjectURL(url)
 
-    toast({
-      title: "Export réussi",
-      description: "Les données ont été exportées en CSV.",
-    })
+      toast({
+        title: "Export réussi",
+        description: `${exportSimCards.length} cartes SIM ont été exportées en Excel avec style.`,
+      })
+      
+    } catch (err: any) {
+      console.error("Error exporting sim cards:", err)
+      toast({
+        title: "Erreur d'export",
+        description: "Erreur lors de l'export des cartes SIM.",
+        variant: "destructive",
+      })
+    } finally {
+      setLoading(false)
+    }
   }
 
   const simColumns = [
@@ -550,9 +756,13 @@ export default function SimCardsPage() {
                         </option>
                       ))}
                     </select>
-                    <Button variant="outline" onClick={handleExport}>
-                      <Download className="h-4 w-4 mr-2" />
-                      Exporter
+                    <Button variant="outline" onClick={handleExport} disabled={loading}>
+                      {loading ? (
+                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600 mr-2"></div>
+                      ) : (
+                        <Download className="h-4 w-4 mr-2" />
+                      )}
+                      {loading ? "Export en cours..." : "Exporter"}
                     </Button>
                     <Button onClick={handleAddSim} className="bg-gradient-to-r from-orange-500 to-red-600 text-white">
                       <Plus className="h-4 w-4 mr-2" />
