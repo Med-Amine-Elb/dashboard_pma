@@ -302,7 +302,7 @@ export default function ProfilePage() {
                       variant="outline"
                       size="sm"
                       className="w-full bg-transparent"
-                      onClick={() => (window.location.href = "/user-dashboard/settings")}
+                      onClick={() => (window.location.href = "/user-dashboard/profile")}
                     >
                       <Key className="h-4 w-4 mr-2" />
                       Changer le mot de passe
