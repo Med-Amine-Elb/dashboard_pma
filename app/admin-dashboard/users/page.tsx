@@ -16,6 +16,7 @@ import { UserManagementApi } from "@/api/generated";
 import { UserDtoRoleEnum, UserDtoStatusEnum } from "@/api/generated";
 import { getApiConfig } from "@/lib/apiClient";
 import { useUser } from "@/contexts/UserContext";
+import ExcelJS from 'exceljs';
 
 // Local table view user model (lowercase status for display)
 interface User {
@@ -436,37 +437,244 @@ export default function UsersPage() {
     }
   }
 
-  const handleExport = () => {
-    const csvContent = [
-      ["Nom", "Email", "Département", "Rôle", "Statut", "Date d'arrivée", "Téléphone", "Adresse", "Manager", "Poste"],
-      ...filteredUsers.map((user) => [
-        user.name,
-        user.email,
-        user.department,
-        user.role,
-        user.status,
-        user.joinDate,
-        user.phone,
-        user.address,
-        user.manager,
-        user.position,
-      ]),
-    ]
-      .map((row) => row.join(","))
-      .join("\n")
+  const handleExport = async () => {
+    try {
+      setLoading(true)
+      
+      const token = localStorage.getItem("jwt_token")
+      if (!token) {
+        toast({
+          title: "Erreur",
+          description: "Token d'authentification manquant",
+          variant: "destructive",
+        })
+        return
+      }
 
-    const blob = new Blob([csvContent], { type: "text/csv" })
-    const url = window.URL.createObjectURL(blob)
-    const a = document.createElement("a")
-    a.href = url
-    a.download = "utilisateurs.csv"
-    a.click()
-    window.URL.revokeObjectURL(url)
+      const api = new UserManagementApi(getApiConfig(token))
+      
+      // Récupérer tous les utilisateurs (sans pagination)
+      const res = await api.getUsers(1, 10000) // Limite très élevée pour récupérer tous les utilisateurs
+      const body: any = res.data as any
+      
+      // Traiter la réponse comme dans fetchUsers
+      let apiUsers: any[] = []
+      if (body) {
+        if (Array.isArray(body)) {
+          apiUsers = body
+        } else if (body.data && body.data.users && Array.isArray(body.data.users)) {
+          apiUsers = body.data.users
+        } else if (body.content && Array.isArray(body.content)) {
+          apiUsers = body.content
+        } else if (body.users && Array.isArray(body.users)) {
+          apiUsers = body.users
+        } else if (body.data && Array.isArray(body.data)) {
+          apiUsers = body.data
+        } else {
+          console.warn("Unexpected response format:", body)
+          apiUsers = []
+        }
+      }
+      
+      // Mapper les utilisateurs pour l'export
+      const exportUsers = apiUsers.map((u: any) => ({
+        name: (u.name || `${u.firstName ?? ""} ${u.lastName ?? ""}`).trim(),
+        email: u.email ?? "",
+        department: u.department ?? "",
+        role: u.role ?? "",
+        status: ((u.status === "ACTIVE" || u.status === "active") ? "Actif" : "Inactif"),
+        joinDate: u.joinDate ?? u.createdAt ?? "",
+        phone: u.phone ?? "",
+        address: u.address ?? "",
+        manager: u.manager ?? "",
+        position: u.position ?? "",
+      }))
+      
+      
+      
+                    // Créer un fichier Excel stylé avec ExcelJS
+       const workbook = new ExcelJS.Workbook()
+       const worksheet = workbook.addWorksheet('Utilisateurs')
+       
+       // Définir les couleurs pour les départements
+       const departmentColors: { [key: string]: string } = {
+         "IT": "E6F3FF", // Bleu clair
+         "Sales": "FFE6CC", // Orange clair
+         "Marketing": "E6F2FF", // Bleu très clair
+         "HR": "F0E6FF", // Violet clair
+         "Finance": "E6FFE6", // Vert clair
+         "R&D": "FFE6E6", // Rouge clair
+       }
+       
+       // Définir les colonnes avec largeurs
+       worksheet.columns = [
+         { header: 'Nom', key: 'name', width: 25 },
+         { header: 'Email', key: 'email', width: 30 },
+         { header: 'Département', key: 'department', width: 15 },
+         { header: 'Rôle', key: 'role', width: 12 },
+         { header: 'Statut', key: 'status', width: 10 },
+         { header: 'Date d\'arrivée', key: 'joinDate', width: 15 },
+         { header: 'Téléphone', key: 'phone', width: 15 },
+         { header: 'Manager', key: 'manager', width: 20 },
+         { header: 'Poste', key: 'position', width: 20 }
+       ]
+       
+       // Styliser l'en-tête
+       const headerRow = worksheet.getRow(1)
+       headerRow.height = 30
+       headerRow.eachCell((cell) => {
+         cell.fill = {
+           type: 'pattern',
+           pattern: 'solid',
+           fgColor: { argb: 'FF4F81BD' } // Bleu foncé
+         }
+         cell.font = {
+           bold: true,
+           color: { argb: 'FFFFFFFF' }, // Blanc
+           size: 12
+         }
+         cell.alignment = {
+           horizontal: 'center',
+           vertical: 'middle'
+         }
+         cell.border = {
+           top: { style: 'thin', color: { argb: 'FF2E5C8A' } },
+           left: { style: 'thin', color: { argb: 'FF2E5C8A' } },
+           bottom: { style: 'thin', color: { argb: 'FF2E5C8A' } },
+           right: { style: 'thin', color: { argb: 'FF2E5C8A' } }
+         }
+       })
+       
+       // Ajouter les données avec style
+       exportUsers.forEach((user, index) => {
+         const row = worksheet.addRow({
+           name: user.name,
+           email: user.email,
+           department: user.department,
+           role: user.role,
+           status: user.status,
+           joinDate: user.joinDate,
+           phone: user.phone || '-',
+           manager: user.manager || '-',
+           position: user.position || '-'
+         })
+         
+         // Styliser la ligne
+         row.height = 25
+         
+         // Couleur alternée pour les lignes
+         if (index % 2 === 0) {
+           row.eachCell((cell) => {
+             cell.fill = {
+               type: 'pattern',
+               pattern: 'solid',
+               fgColor: { argb: 'FFF8F9FA' } // Gris très clair
+             }
+           })
+         }
+         
+         // Styliser la cellule de département
+         const departmentCell = row.getCell('department')
+         const color = departmentColors[user.department] || 'FFFFFF'
+         departmentCell.fill = {
+           type: 'pattern',
+           pattern: 'solid',
+           fgColor: { argb: `FF${color}` }
+         }
+         departmentCell.font = { bold: true }
+         departmentCell.alignment = { horizontal: 'center' }
+         departmentCell.border = {
+           top: { style: 'thin', color: { argb: 'FFCCCCCC' } },
+           left: { style: 'thin', color: { argb: 'FFCCCCCC' } },
+           bottom: { style: 'thin', color: { argb: 'FFCCCCCC' } },
+           right: { style: 'thin', color: { argb: 'FFCCCCCC' } }
+         }
+         
+         // Styliser la cellule de statut
+         const statusCell = row.getCell('status')
+         if (user.status === "Actif") {
+           statusCell.fill = {
+             type: 'pattern',
+             pattern: 'solid',
+             fgColor: { argb: 'FF90EE90' } // Vert clair
+           }
+           statusCell.font = { bold: true, color: { argb: 'FF006400' } } // Vert foncé
+         } else {
+           statusCell.fill = {
+             type: 'pattern',
+             pattern: 'solid',
+             fgColor: { argb: 'FFFFB6C1' } // Rouge clair
+           }
+           statusCell.font = { bold: true, color: { argb: 'FF8B0000' } } // Rouge foncé
+         }
+         statusCell.alignment = { horizontal: 'center' }
+         statusCell.border = {
+           top: { style: 'thin', color: { argb: 'FFCCCCCC' } },
+           left: { style: 'thin', color: { argb: 'FFCCCCCC' } },
+           bottom: { style: 'thin', color: { argb: 'FFCCCCCC' } },
+           right: { style: 'thin', color: { argb: 'FFCCCCCC' } }
+         }
+         
+         // Styliser les autres cellules
+         row.eachCell((cell) => {
+           cell.border = {
+             top: { style: 'thin', color: { argb: 'FFCCCCCC' } },
+             left: { style: 'thin', color: { argb: 'FFCCCCCC' } },
+             bottom: { style: 'thin', color: { argb: 'FFCCCCCC' } },
+             right: { style: 'thin', color: { argb: 'FFCCCCCC' } }
+           }
+           cell.alignment = { vertical: 'middle' }
+         })
+       })
+       
+       // Ajouter un titre stylé
+       worksheet.insertRow(1, ['📊 LISTE DES UTILISATEURS'])
+       const titleRow = worksheet.getRow(1)
+       titleRow.height = 40
+       titleRow.getCell(1).font = {
+         bold: true,
+         size: 16,
+         color: { argb: 'FF4F81BD' }
+       }
+       titleRow.getCell(1).alignment = { horizontal: 'center' }
+       worksheet.mergeCells('A1:I1')
+       
+       // Ajouter des statistiques
+       const statsRow = worksheet.addRow([])
+       statsRow.height = 30
+       const activeUsers = exportUsers.filter(u => u.status === 'Actif').length
+       const totalDepartments = new Set(exportUsers.map(u => u.department)).size
+       
+       statsRow.getCell(1).value = `📈 Statistiques: ${exportUsers.length} utilisateurs total, ${activeUsers} actifs, ${totalDepartments} départements`
+       statsRow.getCell(1).font = { bold: true, color: { argb: 'FF666666' } }
+       statsRow.getCell(1).alignment = { horizontal: 'center' }
+       worksheet.mergeCells(`A${statsRow.number}:I${statsRow.number}`)
+       
+       // Générer le fichier Excel
+       const buffer = await workbook.xlsx.writeBuffer()
+       const blob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" })
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement("a")
+      a.href = url
+      a.download = `utilisateurs_${new Date().toISOString().split('T')[0]}.xlsx`
+      a.click()
+      window.URL.revokeObjectURL(url)
 
-    toast({
-      title: "Export réussi",
-      description: "Les données ont été exportées en CSV.",
-    })
+      toast({
+        title: "Export réussi",
+        description: `${exportUsers.length} utilisateurs ont été exportés en Excel avec style.`,
+      })
+      
+    } catch (err: any) {
+      console.error("Error exporting users:", err)
+      toast({
+        title: "Erreur d'export",
+        description: "Erreur lors de l'export des utilisateurs.",
+        variant: "destructive",
+      })
+    } finally {
+      setLoading(false)
+    }
   }
 
   const userColumns = [
@@ -561,9 +769,13 @@ export default function UsersPage() {
                         </option>
                       ))}
                     </select>
-                    <Button variant="outline" onClick={handleExport}>
-                      <Download className="h-4 w-4 mr-2" />
-                      Exporter
+                    <Button variant="outline" onClick={handleExport} disabled={loading}>
+                      {loading ? (
+                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600 mr-2"></div>
+                      ) : (
+                        <Download className="h-4 w-4 mr-2" />
+                      )}
+                      {loading ? "Export en cours..." : "Exporter"}
                     </Button>
 
                     <Button
