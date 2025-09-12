@@ -16,6 +16,7 @@ import { UserManagementApi } from "@/api/generated";
 import { UserDtoRoleEnum, UserDtoStatusEnum } from "@/api/generated";
 import { getApiConfig } from "@/lib/apiClient";
 import { useUser } from "@/contexts/UserContext";
+import { NotificationsDropdown } from "@/components/notifications-dropdown"
 import ExcelJS from 'exceljs';
 
 // Local table view user model (lowercase status for display)
@@ -97,7 +98,7 @@ export default function UsersPage() {
     })
 
     fetchUsers()
-  }, [page, limit, userData])
+  }, [userData])
 
   useEffect(() => {
     filterUsers()
@@ -129,7 +130,7 @@ export default function UsersPage() {
       console.log("API config:", getApiConfig(token))
       console.log("Fetching users...")
       
-      const res = await api.getUsers(page, limit)
+      const res = await api.getUsers(1, 10000)
       console.log("API Response:", res)
       const body: any = res.data as any
       console.log("Response data:", body)
@@ -211,6 +212,14 @@ export default function UsersPage() {
     }
 
     setFilteredUsers(filtered)
+    
+    // Update pagination based on filtered results
+    const totalFiltered = filtered.length
+    setTotal(totalFiltered)
+    setTotalPages(Math.ceil(totalFiltered / limit))
+    
+    // Reset to page 1 when filtering
+    setPage(1)
   }
 
   const handleLogout = () => {
@@ -699,7 +708,7 @@ export default function UsersPage() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100">
       <div className="flex">
-        <Sidebar activeItem="clients" onLogout={handleLogout} />
+        <Sidebar activeItem="users" onLogout={handleLogout} />
 
         <div className="flex-1 ml-64">
           {/* Header */}
@@ -726,10 +735,7 @@ export default function UsersPage() {
                   FR
                 </Button>
 
-                <Button variant="outline" size="sm" className="bg-white/50 relative">
-                  <Bell className="h-4 w-4" />
-                  <span className="absolute -top-1 -right-1 h-3 w-3 bg-red-500 rounded-full"></span>
-                </Button>
+                <NotificationsDropdown userRole="admin" />
 
                 <div className="flex items-center space-x-3">
                   <Avatar className="h-8 w-8">
@@ -806,61 +812,82 @@ export default function UsersPage() {
                     <div className="mb-4 text-sm text-gray-600">
                       {filteredUsers.length} utilisateur(s) trouvé(s)
                     </div>
-                <DataTable
-                  data={filteredUsers}
-                  columns={userColumns}
-                  renderCell={(user, key) => {
-                    if (key === "status") {
-                      return <Badge className={getStatusColor(user.status)}>{user.status}</Badge>
-                    }
-                    if (key === "actions") {
-                      return (
-                        <div className="flex items-center space-x-2">
-                          <Button 
-                            size="sm" 
-                            variant="outline" 
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              handleEditUser(user)
-                            }}
+                <div className="overflow-x-auto">
+                  <table className="w-full min-w-[1200px]">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        {userColumns.map((column) => (
+                          <th
+                            key={column.key}
+                            className={`px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider ${
+                              column.key === "name" ? "min-w-[120px]" :
+                              column.key === "email" ? "min-w-[180px]" :
+                              column.key === "department" ? "min-w-[100px]" :
+                              column.key === "role" ? "min-w-[80px]" :
+                              column.key === "status" ? "min-w-[80px]" :
+                              column.key === "phone" ? "min-w-[100px]" :
+                              column.key === "manager" ? "min-w-[120px]" :
+                              column.key === "position" ? "min-w-[120px]" :
+                              column.key === "joinDate" ? "min-w-[100px]" :
+                              column.key === "actions" ? "min-w-[100px]" : ""
+                            }`}
                           >
-                            <Edit className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={(e) => handleDeleteUser(user.id, e)}
-                            className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      )
-                    }
-                    return user[key as keyof User] || "-"
-                  }}
-                useExternalPagination
-                />
-                {/* Pagination */}
-                {totalPages > 1 && (
-                  <Pagination className="justify-end mt-4">
-                    <PaginationContent>
-                      <PaginationItem>
-                        <PaginationPrevious href="#" onClick={(e)=>{e.preventDefault(); setPage((p)=>Math.max(1,p-1))}} />
-                      </PaginationItem>
-                      {getPageNumbers().map((p) => (
-                        <PaginationItem key={p}>
-                          <PaginationLink href="#" isActive={p===page} onClick={(e)=>{e.preventDefault(); setPage(p)}}>
-                            {p}
-                          </PaginationLink>
-                        </PaginationItem>
+                            {column.label}
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody className="bg-white divide-y divide-gray-200">
+                      {filteredUsers.map((user, index) => (
+                        <tr
+                          key={index}
+                          className="hover:bg-gray-50 cursor-pointer transition-colors"
+                        >
+                          {userColumns.map((column) => (
+                            <td 
+                              key={column.key} 
+                              className={`px-3 py-4 ${
+                                column.key === "email" || column.key === "manager" || column.key === "position" 
+                                  ? "max-w-[200px] truncate" 
+                                  : "whitespace-nowrap"
+                              }`}
+                              title={column.key === "email" || column.key === "manager" || column.key === "position" 
+                                ? user[column.key as keyof User] as string 
+                                : undefined}
+                            >
+                              {column.key === "status" ? (
+                                <Badge className={getStatusColor(user.status)}>{user.status}</Badge>
+                              ) : column.key === "actions" ? (
+                                <div className="flex items-center space-x-1">
+                                  <Button 
+                                    size="sm" 
+                                    variant="outline" 
+                                    onClick={(e) => {
+                                      e.stopPropagation()
+                                      handleEditUser(user)
+                                    }}
+                                  >
+                                    <Edit className="h-3 w-3" />
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={(e) => handleDeleteUser(user.id, e)}
+                                    className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                                  >
+                                    <Trash2 className="h-3 w-3" />
+                                  </Button>
+                                </div>
+                              ) : (
+                                <span className="text-sm text-gray-900">{user[column.key as keyof User] || "-"}</span>
+                              )}
+                            </td>
+                          ))}
+                        </tr>
                       ))}
-                      <PaginationItem>
-                        <PaginationNext href="#" onClick={(e)=>{e.preventDefault(); setPage((p)=>Math.min(totalPages,p+1))}} />
-                      </PaginationItem>
-                    </PaginationContent>
-                  </Pagination>
-                )}
+                    </tbody>
+                  </table>
+                </div>
                   </>
                 )}
               </CardContent>

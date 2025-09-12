@@ -10,6 +10,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { useToast } from "@/hooks/use-toast"
 import { Toaster } from "@/components/ui/toaster"
 import { AttributionModal } from "@/components/attribution-modal"
+import { NotificationsDropdown } from "@/components/notifications-dropdown"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import {
   Search,
@@ -91,7 +92,11 @@ export default function AssignerAttributionsPage() {
       return
     }
     fetchAttributions()
-  }, [router, pagination.page, pagination.limit, statusFilter, searchTerm, userData])
+  }, [router, userData])
+
+  useEffect(() => {
+    filterAttributions()
+  }, [attributions, searchTerm, statusFilter])
 
   const fetchAttributions = async () => {
     setLoading(true)
@@ -116,12 +121,12 @@ export default function AssignerAttributionsPage() {
 
       // Fetch regular attributions
       const attributionRes = await attributionApi.getAttributions(
-        pagination.page,
-        pagination.limit,
-        statusParam,
+        1,
+        10000,
+        undefined, // status - we'll filter client-side
         undefined, // userId
         undefined, // assignedBy
-        searchTerm || undefined
+        undefined // search - we'll filter client-side
       )
 
       console.log("Attribution API Response:", attributionRes)
@@ -271,7 +276,6 @@ export default function AssignerAttributionsPage() {
       const allAssignments = [...transformedAttributions, ...transformedDirectAssignments]
 
       setAttributions(allAssignments)
-      setFilteredAttributions(allAssignments)
 
       // Update pagination info (adjust for combined results)
       const totalItems = apiAttributions.length + directSimAssignments.length
@@ -294,6 +298,44 @@ export default function AssignerAttributionsPage() {
     } finally {
       setLoading(false)
     }
+  }
+
+  const filterAttributions = () => {
+    let filtered = attributions
+
+    if (searchTerm) {
+      filtered = filtered.filter(
+        (attribution) =>
+          attribution.userName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          attribution.userEmail.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          attribution.phoneModel?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          attribution.simCardNumber?.toLowerCase().includes(searchTerm.toLowerCase()),
+      )
+    }
+
+    if (statusFilter !== "all") {
+      // Map filter values to API status values
+      const statusMap: { [key: string]: string } = {
+        "active": "ACTIVE",
+        "returned": "RETURNED", 
+        "pending": "PENDING"
+      }
+      const apiStatus = statusMap[statusFilter] || statusFilter.toUpperCase()
+      filtered = filtered.filter((attribution) => attribution.status === apiStatus)
+    }
+
+    setFilteredAttributions(filtered)
+    
+    // Update pagination based on filtered results
+    const totalFiltered = filtered.length
+    setPagination(prev => ({
+      ...prev,
+      total: totalFiltered,
+      totalPages: Math.ceil(totalFiltered / prev.limit)
+    }))
+    
+    // Reset to page 1 when filtering
+    setPagination(prev => ({ ...prev, page: 1 }))
   }
 
   const handleLogout = () => {
@@ -444,10 +486,27 @@ export default function AssignerAttributionsPage() {
 
       if (editingAttribution) {
         // Edit existing attribution
+        const normalizeDate = (d?: string) => {
+          if (!d) return undefined
+          const trimmed = (d as string).trim()
+          const compact = trimmed.replace(/\s+/g, "")
+          const ddmmyyyy = compact.match(/^(\d{2})\/(\d{2})\/(\d{4})$/)
+          if (ddmmyyyy) {
+            const [, dd, mm, yyyy] = ddmmyyyy
+            return `${yyyy}-${mm}-${dd}`
+          }
+          if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return trimmed
+          const parsed = new Date(trimmed)
+          if (!isNaN(parsed.getTime())) return parsed.toISOString().split("T")[0]
+          return undefined
+        }
         const updateData: AttributionDto = {
           userId: parseInt(attributionData.userId || "0"),
           phoneId: attributionData.phoneId ? parseInt(attributionData.phoneId) : undefined,
           simCardId: attributionData.simCardId ? parseInt(attributionData.simCardId) : undefined,
+          assignmentDate: normalizeDate(attributionData.assignmentDate as any),
+          returnDate: normalizeDate(attributionData.returnDate as any),
+          status: (attributionData.status as any) || undefined,
           notes: attributionData.notes,
         }
         
@@ -740,10 +799,7 @@ export default function AssignerAttributionsPage() {
                 FR
               </Button>
 
-              <Button variant="outline" size="sm" className="bg-white/50 relative">
-                <Bell className="h-4 w-4" />
-                <span className="absolute -top-1 -right-1 h-3 w-3 bg-red-500 rounded-full"></span>
-              </Button>
+              <NotificationsDropdown userRole="assigner" />
 
               <div className="flex items-center space-x-3">
                 <Avatar className="h-8 w-8">
@@ -973,26 +1029,6 @@ export default function AssignerAttributionsPage() {
                     </table>
                   </div>
 
-                                     {/* Pagination */}
-                   {pagination.totalPages > 1 && (
-                     <Pagination className="justify-end mt-4">
-                       <PaginationContent>
-                         <PaginationItem>
-                           <PaginationPrevious href="#" onClick={(e)=>{e.preventDefault(); handlePageChange(Math.max(1,pagination.page-1))}} />
-                         </PaginationItem>
-                         {getPageNumbers().map((p) => (
-                           <PaginationItem key={p}>
-                             <PaginationLink href="#" isActive={p===pagination.page} onClick={(e)=>{e.preventDefault(); handlePageChange(p)}}>
-                               {p}
-                             </PaginationLink>
-                           </PaginationItem>
-                         ))}
-                         <PaginationItem>
-                           <PaginationNext href="#" onClick={(e)=>{e.preventDefault(); handlePageChange(Math.min(pagination.totalPages,pagination.page+1))}} />
-                         </PaginationItem>
-                       </PaginationContent>
-                     </Pagination>
-                   )}
                 </>
               )}
             </CardContent>

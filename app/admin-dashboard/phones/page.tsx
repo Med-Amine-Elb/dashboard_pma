@@ -15,6 +15,7 @@ import { useToast } from "@/hooks/use-toast"
 import { PhoneManagementApi } from "@/api/generated";
 import { getApiConfig } from "@/lib/apiClient";
 import { useUser } from "@/contexts/UserContext";
+import { NotificationsDropdown } from "@/components/notifications-dropdown"
 import ExcelJS from 'exceljs';
 
 interface PhoneData {
@@ -96,7 +97,7 @@ export default function PhonesPage() {
     })
 
     fetchPhones()
-  }, [page, limit, statusFilter, userData])
+  }, [userData])
 
   useEffect(() => {
     filterPhones()
@@ -128,7 +129,8 @@ export default function PhonesPage() {
       console.log("API config:", getApiConfig(token))
       console.log("Fetching phones...")
       
-      const res = await api.getPhones(page, limit, undefined, undefined, undefined)
+      // Fetch ALL phones (no pagination) for proper filtering
+      const res = await api.getPhones(1, 10000, undefined, undefined, undefined)
       console.log("API Response:", res)
       console.log("Response data:", res.data)
       console.log("Response status:", res.status)
@@ -173,10 +175,6 @@ export default function PhonesPage() {
       
       console.log("Mapped phones:", mappedPhones)
       setPhones(mappedPhones)
-      if (meta) {
-        setTotal(meta.total ?? mappedPhones.length)
-        setTotalPages(meta.totalPages ?? Math.ceil((meta.total ?? mappedPhones.length)/limit))
-      }
       
     } catch (err: any) {
       console.error("Error fetching phones:", err)
@@ -203,10 +201,27 @@ export default function PhonesPage() {
     }
 
     if (statusFilter !== "all") {
-      filtered = filtered.filter((phone) => phone.status === statusFilter)
+      // Map filter values to API status values
+      const statusMap: { [key: string]: string } = {
+        "available": "AVAILABLE",
+        "assigned": "ASSIGNED", 
+        "maintenance": "DAMAGED", // Assuming maintenance maps to damaged
+        "retired": "LOST", // Assuming retired maps to lost
+        "suspendue": "BLOCKED" // Suspendue means blocked
+      }
+      const apiStatus = statusMap[statusFilter] || statusFilter.toUpperCase()
+      filtered = filtered.filter((phone) => phone.status === apiStatus)
     }
 
     setFilteredPhones(filtered)
+    
+    // Update pagination based on filtered results
+    const totalFiltered = filtered.length
+    setTotal(totalFiltered)
+    setTotalPages(Math.ceil(totalFiltered / limit))
+    
+    // Reset to page 1 when filtering
+    setPage(1)
   }
 
   const handleLogout = () => {
@@ -690,13 +705,19 @@ export default function PhonesPage() {
   ]
 
   const getStatusColor = (status: string) => {
-    const colors = {
-      available: "bg-green-100 text-green-800",
-      assigned: "bg-blue-100 text-blue-800",
-      maintenance: "bg-orange-100 text-orange-800",
-      retired: "bg-gray-100 text-gray-800",
+    const s = (status || "").toString().toUpperCase()
+    switch (s) {
+      case "AVAILABLE":
+        return "bg-green-100 text-green-800"
+      case "ASSIGNED":
+        return "bg-blue-100 text-blue-800"
+      case "DAMAGED":
+        return "bg-amber-100 text-amber-800"
+      case "LOST":
+        return "bg-gray-200 text-gray-800"
+      default:
+        return "bg-gray-100 text-gray-800"
     }
-    return colors[status as keyof typeof colors] || "bg-gray-100 text-gray-800"
   }
 
   const getConditionColor = (condition: string) => {
@@ -739,10 +760,7 @@ export default function PhonesPage() {
                   FR
                 </Button>
 
-                <Button variant="outline" size="sm" className="bg-white/50 relative">
-                  <Bell className="h-4 w-4" />
-                  <span className="absolute -top-1 -right-1 h-3 w-3 bg-red-500 rounded-full"></span>
-                </Button>
+                <NotificationsDropdown userRole="admin" />
 
                 <div className="flex items-center space-x-3">
                   <Avatar className="h-8 w-8">
@@ -780,6 +798,7 @@ export default function PhonesPage() {
                       <option value="assigned">Assigné</option>
                       <option value="maintenance">Maintenance</option>
                       <option value="retired">Retiré</option>
+                      <option value="suspendue">Suspendue</option>
                     </select>
                     <Button variant="outline" onClick={handleExport} disabled={loading}>
                       {loading ? (
@@ -845,28 +864,7 @@ export default function PhonesPage() {
                     }
                     return phone[key as keyof PhoneData] || "-"
                   }}
-                useExternalPagination
                 />
-                {/* Pagination */}
-                {totalPages > 1 && (
-                  <Pagination className="justify-end mt-4">
-                    <PaginationContent>
-                      <PaginationItem>
-                        <PaginationPrevious href="#" onClick={(e)=>{e.preventDefault(); setPage((p)=>Math.max(1,p-1))}} />
-                      </PaginationItem>
-                      {getPageNumbers().map((p) => (
-                        <PaginationItem key={p}>
-                          <PaginationLink href="#" isActive={p===page} onClick={(e)=>{e.preventDefault(); setPage(p)}}>
-                            {p}
-                          </PaginationLink>
-                        </PaginationItem>
-                      ))}
-                      <PaginationItem>
-                        <PaginationNext href="#" onClick={(e)=>{e.preventDefault(); setPage((p)=>Math.min(totalPages,p+1))}} />
-                      </PaginationItem>
-                    </PaginationContent>
-                  </Pagination>
-                )}
                 </>
                 )}
               </CardContent>

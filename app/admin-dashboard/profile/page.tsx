@@ -18,6 +18,7 @@ import { UserManagementApi } from "@/api/generated/apis/user-management-api"
 import { SIMCardManagementApi } from "@/api/generated/apis/simcard-management-api"
 import { AuthenticationApi } from "@/api/generated/apis/authentication-api"
 import { getApiConfig } from "@/lib/apiClient"
+import { NotificationsDropdown } from "@/components/notifications-dropdown"
 
 interface UserProfile {
   id: string
@@ -290,10 +291,7 @@ export default function ProfilePage() {
                   FR
                 </Button>
 
-                <Button variant="outline" size="sm" className="bg-white/50 relative">
-                  <Bell className="h-4 w-4" />
-                  <span className="absolute -top-1 -right-1 h-3 w-3 bg-red-500 rounded-full"></span>
-                </Button>
+                <NotificationsDropdown userRole="admin" />
 
                 <div className="flex items-center space-x-3">
                   <Avatar className="h-8 w-8">

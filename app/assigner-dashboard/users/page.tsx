@@ -17,6 +17,7 @@ import { SIMCardManagementApi } from "@/api/generated/apis/simcard-management-ap
 import { getApiConfig } from "@/lib/apiClient"
 import { useUser } from "@/contexts/UserContext"
 import { UserDto } from "@/api/generated/models"
+import { NotificationsDropdown } from "@/components/notifications-dropdown"
 import ExcelJS from 'exceljs'
 
 interface AssignerUser {
@@ -75,7 +76,11 @@ export default function AssignerUsersPage() {
     })
 
     fetchUsers()
-  }, [pagination.page, pagination.limit, statusFilter, searchTerm, userData])
+  }, [userData])
+
+  useEffect(() => {
+    filterUsers()
+  }, [users, searchTerm, statusFilter])
 
   // Refresh data when page becomes visible
   useEffect(() => {
@@ -123,11 +128,11 @@ export default function AssignerUsersPage() {
       })
 
       const res = await api.getUsers(
-        pagination.page,
-        pagination.limit,
-        searchTerm || undefined,
-        undefined, // department
-        statusParam,
+        1,
+        10000,
+        undefined, // search - we'll filter client-side
+        undefined, // department - we'll filter client-side
+        undefined, // status - we'll filter client-side
         undefined // role
       )
 
@@ -272,7 +277,6 @@ export default function AssignerUsersPage() {
        }))
 
       setUsers(transformedUsers)
-      setFilteredUsers(transformedUsers)
 
       // Update pagination info
       if (paginationData.total !== undefined) {
@@ -301,6 +305,58 @@ export default function AssignerUsersPage() {
       })
     } finally {
       setLoading(false)
+    }
+  }
+
+  const filterUsers = () => {
+    let filtered = users
+
+    if (searchTerm) {
+      filtered = filtered.filter(
+        (user) =>
+          user.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          user.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          user.department.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          user.position.toLowerCase().includes(searchTerm.toLowerCase()),
+      )
+    }
+
+    if (statusFilter !== "all") {
+      // Map filter values to API status values
+      const statusMap: { [key: string]: string } = {
+        "active": "ACTIVE",
+        "inactive": "INACTIVE"
+      }
+      const apiStatus = statusMap[statusFilter] || statusFilter.toUpperCase()
+      filtered = filtered.filter((user) => {
+        // Convert frontend status back to API status for comparison
+        const userApiStatus = mapStatusToApi(user.status)
+        return userApiStatus === apiStatus
+      })
+    }
+
+    setFilteredUsers(filtered)
+    
+    // Update pagination based on filtered results
+    const totalFiltered = filtered.length
+    setPagination(prev => ({
+      ...prev,
+      total: totalFiltered,
+      totalPages: Math.ceil(totalFiltered / prev.limit)
+    }))
+    
+    // Reset to page 1 when filtering
+    setPagination(prev => ({ ...prev, page: 1 }))
+  }
+
+  const mapStatusToApi = (frontendStatus: string): string => {
+    switch (frontendStatus) {
+      case "active":
+        return "ACTIVE"
+      case "inactive":
+        return "INACTIVE"
+      default:
+        return "ACTIVE"
     }
   }
 
@@ -643,10 +699,7 @@ export default function AssignerUsersPage() {
                   FR
                 </Button>
 
-                <Button variant="outline" size="sm" className="bg-white/50 relative">
-                  <Bell className="h-4 w-4" />
-                  <span className="absolute -top-1 -right-1 h-3 w-3 bg-red-500 rounded-full"></span>
-                </Button>
+                <NotificationsDropdown userRole="assigner" />
 
                 <div className="flex items-center space-x-3">
                   <Avatar className="h-8 w-8">
@@ -791,26 +844,6 @@ export default function AssignerUsersPage() {
                       }}
                     />
 
-                    {/* Pagination */}
-                    {pagination.totalPages > 1 && (
-                      <Pagination className="justify-end mt-4">
-                        <PaginationContent>
-                          <PaginationItem>
-                            <PaginationPrevious href="#" onClick={(e)=>{e.preventDefault(); handlePageChange(Math.max(1,pagination.page-1))}} />
-                          </PaginationItem>
-                          {getPageNumbers().map((p) => (
-                            <PaginationItem key={p}>
-                              <PaginationLink href="#" isActive={p===pagination.page} onClick={(e)=>{e.preventDefault(); handlePageChange(p)}}>
-                                {p}
-                              </PaginationLink>
-                            </PaginationItem>
-                          ))}
-                          <PaginationItem>
-                            <PaginationNext href="#" onClick={(e)=>{e.preventDefault(); handlePageChange(Math.min(pagination.totalPages,pagination.page+1))}} />
-                          </PaginationItem>
-                        </PaginationContent>
-                      </Pagination>
-                    )}
                   </>
                 )}
               </CardContent>

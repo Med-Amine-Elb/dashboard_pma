@@ -16,6 +16,7 @@ import { useToast } from "@/hooks/use-toast"
 import { SIMCardManagementApi } from "@/api/generated";
 import { getApiConfig } from "@/lib/apiClient";
 import { useUser } from "@/contexts/UserContext";
+import { NotificationsDropdown } from "@/components/notifications-dropdown"
 import ExcelJS from 'exceljs';
 
 interface SimCard {
@@ -98,7 +99,7 @@ export default function SimCardsPage() {
 
     fetchSimCards()
     loadAssignmentHistory()
-  }, [page, limit, statusFilter, carrierFilter, userData])
+  }, [userData])
 
   useEffect(() => {
     filterSimCards()
@@ -130,7 +131,7 @@ export default function SimCardsPage() {
       console.log("API config:", getApiConfig(token))
       console.log("Fetching SIM cards...")
       
-      const res = await api.getSimCards(page, limit)
+      const res = await api.getSimCards(1, 10000)
       console.log("API Response:", res)
       console.log("Response data:", res.data)
       console.log("Response status:", res.status)
@@ -191,30 +192,22 @@ export default function SimCardsPage() {
     }
   }
 
-  const loadAssignmentHistory = () => {
-    const mockHistory: AssignmentHistory[] = [
-      {
-        id: "1",
-        simCardId: "1",
-        phoneId: "1",
-        userId: "user1",
-        assignedBy: "admin1",
-        assignmentDate: "2024-01-15",
-        status: "active",
-        notes: "Attribution initiale",
-      },
-      {
-        id: "2",
-        simCardId: "2",
-        userId: "user2",
-        assignedBy: "admin1",
-        assignmentDate: "2023-12-01",
-        returnDate: "2024-01-10",
-        status: "returned",
-        notes: "Changement de poste",
-      },
-    ]
-    setAssignmentHistory(mockHistory)
+  const loadAssignmentHistory = async () => {
+    try {
+      const token = localStorage.getItem("jwt_token")
+      if (!token) {
+        console.warn("No token available for loading assignment history")
+        setAssignmentHistory([])
+        return
+      }
+
+      // For now, we'll use an empty array since we don't have a specific assignment history API
+      // In the future, this could be replaced with a real API call
+      setAssignmentHistory([])
+    } catch (error) {
+      console.error("Error loading assignment history:", error)
+      setAssignmentHistory([])
+    }
   }
 
   const filterSimCards = () => {
@@ -231,7 +224,16 @@ export default function SimCardsPage() {
     }
 
     if (statusFilter !== "all") {
-      filtered = filtered.filter((sim) => sim.status === statusFilter)
+      // Map filter values to API status values
+      const statusMap: { [key: string]: string } = {
+        "available": "AVAILABLE",
+        "assigned": "ASSIGNED", 
+        "inactive": "INACTIVE",
+        "suspendue": "BLOCKED", // Suspendue means blocked
+        "expired": "EXPIRED" // Expirée means expired
+      }
+      const apiStatus = statusMap[statusFilter] || statusFilter.toUpperCase()
+      filtered = filtered.filter((sim) => sim.status === apiStatus)
     }
 
     if (carrierFilter !== "all") {
@@ -239,6 +241,14 @@ export default function SimCardsPage() {
     }
 
     setFilteredSimCards(filtered)
+    
+    // Update pagination based on filtered results
+    const totalFiltered = filtered.length
+    setTotal(totalFiltered)
+    setTotalPages(Math.ceil(totalFiltered / limit))
+    
+    // Reset to page 1 when filtering
+    setPage(1)
   }
 
   const handleLogout = () => {
@@ -661,13 +671,19 @@ export default function SimCardsPage() {
   ]
 
   const getStatusColor = (status: string) => {
-    const colors = {
-      available: "bg-green-100 text-green-800",
-      assigned: "bg-blue-100 text-blue-800",
-      suspended: "bg-orange-100 text-orange-800",
-      expired: "bg-red-100 text-red-800",
+    const s = (status || "").toString().toUpperCase()
+    switch (s) {
+      case "AVAILABLE":
+        return "bg-green-100 text-green-800"
+      case "ASSIGNED":
+        return "bg-blue-100 text-blue-800"
+      case "BLOCKED":
+        return "bg-amber-100 text-amber-800"
+      case "EXPIRED":
+        return "bg-red-100 text-red-800"
+      default:
+        return "bg-gray-100 text-gray-800"
     }
-    return colors[status as keyof typeof colors] || "bg-gray-100 text-gray-800"
   }
 
   const carriers = ["Orange", "Maroc Telecom"]
@@ -702,10 +718,7 @@ export default function SimCardsPage() {
                   FR
                 </Button>
 
-                <Button variant="outline" size="sm" className="bg-white/50 relative">
-                  <Bell className="h-4 w-4" />
-                  <span className="absolute -top-1 -right-1 h-3 w-3 bg-red-500 rounded-full"></span>
-                </Button>
+                <NotificationsDropdown userRole="admin" />
 
                 <div className="flex items-center space-x-3">
                   <Avatar className="h-8 w-8">
@@ -741,7 +754,7 @@ export default function SimCardsPage() {
                       <option value="all">Tous les statuts</option>
                       <option value="available">Disponible</option>
                       <option value="assigned">Assignée</option>
-                      <option value="suspended">Suspendue</option>
+                      <option value="suspendue">Suspendue</option>
                       <option value="expired">Expirée</option>
                     </select>
                     <select
@@ -832,28 +845,7 @@ export default function SimCardsPage() {
                     }
                     return sim[key as keyof SimCard] || "-"
                   }}
-                useExternalPagination
                 />
-                {/* Pagination */}
-                {totalPages > 1 && (
-                  <Pagination className="justify-end mt-4">
-                    <PaginationContent>
-                      <PaginationItem>
-                        <PaginationPrevious href="#" onClick={(e)=>{e.preventDefault(); setPage((p)=>Math.max(1,p-1))}} />
-                      </PaginationItem>
-                      {getPageNumbers().map((p) => (
-                        <PaginationItem key={p}>
-                          <PaginationLink href="#" isActive={p===page} onClick={(e)=>{e.preventDefault(); setPage(p)}}>
-                            {p}
-                          </PaginationLink>
-                        </PaginationItem>
-                      ))}
-                      <PaginationItem>
-                        <PaginationNext href="#" onClick={(e)=>{e.preventDefault(); setPage((p)=>Math.min(totalPages,p+1))}} />
-                      </PaginationItem>
-                    </PaginationContent>
-                  </Pagination>
-                )}
                 </>
                 )}
               </CardContent>

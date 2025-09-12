@@ -17,6 +17,7 @@ import { SIMCardManagementApi } from "@/api/generated/apis/simcard-management-ap
 import { getApiConfig } from "@/lib/apiClient"
 import { useUser } from "@/contexts/UserContext"
 import { SimCardDto } from "@/api/generated/models"
+import { NotificationsDropdown } from "@/components/notifications-dropdown"
 import axios from "axios"
 import ExcelJS from 'exceljs'
 
@@ -93,7 +94,11 @@ export default function SimAssignmentsPage() {
 
     fetchSimCards()
     loadAssignmentHistory()
-  }, [pagination.page, pagination.limit, statusFilter, searchTerm, userData])
+  }, [userData])
+
+  useEffect(() => {
+    filterSimCards()
+  }, [simCards, searchTerm, statusFilter])
 
   const fetchSimCards = async () => {
     setLoading(true)
@@ -129,10 +134,10 @@ export default function SimAssignmentsPage() {
       })
 
       const res = await api.getSimCards(
-        pagination.page,
-        pagination.limit,
-        statusParam,
-        searchTerm || undefined,
+        1,
+        10000,
+        undefined, // status - we'll filter client-side
+        undefined, // search - we'll filter client-side
         undefined // iccid
       )
 
@@ -174,7 +179,6 @@ export default function SimAssignmentsPage() {
       console.log("Transformed SIM cards:", transformedSimCards)
 
       setSimCards(transformedSimCards)
-      setFilteredSimCards(transformedSimCards)
 
       // Update pagination info
       if (paginationData.total !== undefined) {
@@ -208,6 +212,64 @@ export default function SimAssignmentsPage() {
     }
   }
 
+  const filterSimCards = () => {
+    let filtered = simCards
+
+    if (searchTerm) {
+      filtered = filtered.filter(
+        (sim) =>
+          sim.number.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          sim.carrier.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          sim.plan.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          sim.iccid.toLowerCase().includes(searchTerm.toLowerCase()),
+      )
+    }
+
+    if (statusFilter !== "all") {
+      // Map filter values to API status values
+      const statusMap: { [key: string]: string } = {
+        "available": "AVAILABLE",
+        "assigned": "ASSIGNED", 
+        "lost": "LOST",
+        "suspendue": "BLOCKED" // Suspendue means blocked
+      }
+      const apiStatus = statusMap[statusFilter] || statusFilter.toUpperCase()
+      filtered = filtered.filter((sim) => {
+        // Convert frontend status back to API status for comparison
+        const simApiStatus = mapStatusToApi(sim.status)
+        return simApiStatus === apiStatus
+      })
+    }
+
+    setFilteredSimCards(filtered)
+    
+    // Update pagination based on filtered results
+    const totalFiltered = filtered.length
+    setPagination(prev => ({
+      ...prev,
+      total: totalFiltered,
+      totalPages: Math.ceil(totalFiltered / prev.limit)
+    }))
+    
+    // Reset to page 1 when filtering
+    setPagination(prev => ({ ...prev, page: 1 }))
+  }
+
+  const mapStatusToApi = (frontendStatus: string): string => {
+    switch (frontendStatus) {
+      case "available":
+        return "AVAILABLE"
+      case "assigned":
+        return "ASSIGNED"
+      case "lost":
+        return "LOST"
+      case "blocked":
+        return "BLOCKED"
+      default:
+        return "AVAILABLE"
+    }
+  }
+
   const mapStatusToFrontend = (apiStatus: string): "available" | "assigned" | "lost" | "blocked" => {
     switch (apiStatus) {
       case "AVAILABLE":
@@ -223,43 +285,22 @@ export default function SimAssignmentsPage() {
     }
   }
 
-  const loadAssignmentHistory = () => {
-    const mockHistory: AssignmentHistory[] = [
-      {
-        id: "1",
-        simCardId: "1",
-        phoneId: "1",
-        userId: "user1",
-        userName: "Jean Dupont",
-        assignedBy: "Randy Riley",
-        assignmentDate: "2024-01-15",
-        status: "active",
-        notes: "Attribution avec iPhone 15 Pro",
-      },
-      {
-        id: "2",
-        simCardId: "2",
-        userId: "user2",
-        userName: "Pierre Martin",
-        assignedBy: "Randy Riley",
-        assignmentDate: "2023-12-01",
-        returnDate: "2024-01-10",
-        status: "returned",
-        notes: "Changement de poste",
-      },
-      {
-        id: "3",
-        simCardId: "3",
-        phoneId: "2",
-        userId: "user3",
-        userName: "Marie Martin",
-        assignedBy: "Randy Riley",
-        assignmentDate: "2024-02-01",
-        status: "active",
-        notes: "Attribution avec Galaxy S24",
-      },
-    ]
-    setAssignmentHistory(mockHistory)
+  const loadAssignmentHistory = async () => {
+    try {
+      const token = localStorage.getItem("jwt_token")
+      if (!token) {
+        console.warn("No token available for loading assignment history")
+        setAssignmentHistory([])
+        return
+      }
+
+      // For now, we'll use an empty array since we don't have a specific assignment history API
+      // In the future, this could be replaced with a real API call
+      setAssignmentHistory([])
+    } catch (error) {
+      console.error("Error loading assignment history:", error)
+      setAssignmentHistory([])
+    }
   }
 
   const handleLogout = () => {
@@ -441,13 +482,19 @@ export default function SimAssignmentsPage() {
   ]
 
   const getStatusColor = (status: string) => {
-    const colors = {
-      available: "bg-green-100 text-green-800",
-      assigned: "bg-blue-100 text-blue-800",
-      lost: "bg-orange-100 text-orange-800",
-      blocked: "bg-red-100 text-red-800",
+    const s = (status || "").toString().toUpperCase()
+    switch (s) {
+      case "AVAILABLE":
+        return "bg-green-100 text-green-800"
+      case "ASSIGNED":
+        return "bg-blue-100 text-blue-800"
+      case "BLOCKED":
+        return "bg-amber-100 text-amber-800"
+      case "EXPIRED":
+        return "bg-red-100 text-red-800"
+      default:
+        return "bg-gray-100 text-gray-800"
     }
-    return colors[status as keyof typeof colors] || "bg-gray-100 text-gray-800"
   }
 
   const handlePageChange = (newPage: number) => {
@@ -717,10 +764,7 @@ export default function SimAssignmentsPage() {
                   FR
                 </Button>
 
-                <Button variant="outline" size="sm" className="bg-white/50 relative">
-                  <Bell className="h-4 w-4" />
-                  <span className="absolute -top-1 -right-1 h-3 w-3 bg-red-500 rounded-full"></span>
-                </Button>
+                <NotificationsDropdown userRole="assigner" />
 
                 <div className="flex items-center space-x-3">
                   <Avatar className="h-8 w-8">
@@ -759,7 +803,7 @@ export default function SimAssignmentsPage() {
                       <option value="available">Disponible</option>
                       <option value="assigned">Assignée</option>
                       <option value="lost">Perdue</option>
-                      <option value="blocked">Bloquée</option>
+                      <option value="suspendue">Suspendue</option>
                     </select>
                     <Button 
                       variant="outline" 
@@ -849,26 +893,6 @@ export default function SimAssignmentsPage() {
                       }}
                     />
 
-                    {/* Pagination */}
-                    {pagination.totalPages > 1 && (
-                      <Pagination className="justify-end mt-4">
-                        <PaginationContent>
-                          <PaginationItem>
-                            <PaginationPrevious href="#" onClick={(e)=>{e.preventDefault(); handlePageChange(Math.max(1,pagination.page-1))}} />
-                          </PaginationItem>
-                          {getPageNumbers().map((p) => (
-                            <PaginationItem key={p}>
-                              <PaginationLink href="#" isActive={p===pagination.page} onClick={(e)=>{e.preventDefault(); handlePageChange(p)}}>
-                                {p}
-                              </PaginationLink>
-                            </PaginationItem>
-                          ))}
-                          <PaginationItem>
-                            <PaginationNext href="#" onClick={(e)=>{e.preventDefault(); handlePageChange(Math.min(pagination.totalPages,pagination.page+1))}} />
-                          </PaginationItem>
-                        </PaginationContent>
-                      </Pagination>
-                    )}
                   </>
                 )}
               </CardContent>

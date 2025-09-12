@@ -14,6 +14,7 @@ import { useToast } from "@/hooks/use-toast"
 import { CalendarEventControllerApi } from "@/api/generated"
 import { getApiConfig } from "@/lib/apiClient"
 import { useUser } from "@/contexts/UserContext"
+import { NotificationsDropdown } from "@/components/notifications-dropdown"
 
 interface CalendarEvent {
   id: number
@@ -260,10 +261,7 @@ export default function CalendarPage() {
                   FR
                 </Button>
 
-                <Button variant="outline" size="sm" className="bg-white/50 relative">
-                  <Bell className="h-4 w-4" />
-                  <span className="absolute -top-1 -right-1 h-3 w-3 bg-red-500 rounded-full"></span>
-                </Button>
+                <NotificationsDropdown userRole="admin" />
 
                 <div className="flex items-center space-x-3">
                   <Avatar className="h-8 w-8">

@@ -1,6 +1,7 @@
 "use client"
 
 import { UserProvider } from "@/contexts/UserContext"
+import { NotificationsProvider } from "@/contexts/NotificationsContext"
 import { ReactNode } from "react"
 
 interface ProvidersProps {
@@ -10,7 +11,9 @@ interface ProvidersProps {
 export function Providers({ children }: ProvidersProps) {
   return (
     <UserProvider>
-      {children}
+      <NotificationsProvider>
+        {children}
+      </NotificationsProvider>
     </UserProvider>
   )
 }

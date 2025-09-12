@@ -18,6 +18,9 @@ import {
   Settings,
   BookMarkedIcon as MarkAsUnread,
 } from "lucide-react"
+import { NotificationsApi } from "@/api/generated"
+import { getApiConfig } from "@/lib/apiClient"
+import { useNotifications } from "@/contexts/NotificationsContext"
 
 interface Notification {
   id: string
@@ -34,101 +37,61 @@ interface NotificationsDropdownProps {
 }
 
 export function NotificationsDropdown({ userRole = "user" }: NotificationsDropdownProps) {
-  const [notifications, setNotifications] = useState<Notification[]>([])
   const [isOpen, setIsOpen] = useState(false)
+  const { notifications: ctxNotifications, loading, error, refresh, markAsReadLocal, removeLocal } = useNotifications()
 
   useEffect(() => {
-    // Load notifications based on user role
-    const loadNotifications = () => {
-      const baseNotifications: Notification[] = [
-        {
-          id: "1",
-          title: "Demande approuvée",
-          message: "Votre demande de remplacement de téléphone a été approuvée",
-          type: "success",
-          timestamp: new Date(Date.now() - 1000 * 60 * 30), // 30 minutes ago
-          read: false,
-          actionUrl: "/user-dashboard/requests",
-        },
-        {
-          id: "2",
-          title: "Maintenance programmée",
-          message: "Maintenance du système prévue demain de 2h à 4h du matin",
-          type: "warning",
-          timestamp: new Date(Date.now() - 1000 * 60 * 60 * 2), // 2 hours ago
-          read: false,
-        },
-        {
-          id: "3",
-          title: "Nouveau téléphone attribué",
-          message: "iPhone 15 Pro - Série: IP15P789012 vous a été attribué",
-          type: "info",
-          timestamp: new Date(Date.now() - 1000 * 60 * 60 * 24), // 1 day ago
-          read: true,
-          actionUrl: "/user-dashboard/my-phone",
-        },
-        {
-          id: "4",
-          title: "Rappel: Mise à jour profil",
-          message: "Veuillez mettre à jour vos informations de contact",
-          type: "info",
-          timestamp: new Date(Date.now() - 1000 * 60 * 60 * 24 * 2), // 2 days ago
-          read: true,
-          actionUrl: "/user-dashboard/profile",
-        },
-      ]
+    refresh()
+  }, [userRole, refresh])
 
-      // Add role-specific notifications
-      if (userRole === "admin") {
-        baseNotifications.unshift(
-          {
-            id: "admin-1",
-            title: "Nouvelle demande en attente",
-            message: "5 nouvelles demandes nécessitent votre approbation",
-            type: "warning",
-            timestamp: new Date(Date.now() - 1000 * 60 * 15), // 15 minutes ago
-            read: false,
-            actionUrl: "/admin-dashboard/attributions",
-          },
-          {
-            id: "admin-2",
-            title: "Stock faible",
-            message: "Stock de iPhone 15 Pro inférieur à 10 unités",
-            type: "error",
-            timestamp: new Date(Date.now() - 1000 * 60 * 45), // 45 minutes ago
-            read: false,
-            actionUrl: "/admin-dashboard/phones",
-          },
-        )
-      } else if (userRole === "assigner") {
-        baseNotifications.unshift(
-          {
-            id: "assigner-1",
-            title: "Attribution urgente",
-            message: "Demande prioritaire de Jean Dupont à traiter",
-            type: "warning",
-            timestamp: new Date(Date.now() - 1000 * 60 * 10), // 10 minutes ago
-            read: false,
-            actionUrl: "/assigner-dashboard/attributions",
-          },
-          {
-            id: "assigner-2",
-            title: "Retour de matériel",
-            message: "3 téléphones retournés aujourd'hui à vérifier",
-            type: "info",
-            timestamp: new Date(Date.now() - 1000 * 60 * 60), // 1 hour ago
-            read: false,
-            actionUrl: "/assigner-dashboard/phones",
-          },
-        )
+  const loadNotifications = async () => {
+    setLoading(true)
+    setError(null)
+    
+    try {
+      const token = localStorage.getItem("jwt_token")
+      if (!token) {
+        setError("Token d'authentification manquant")
+        return
       }
 
-      setNotifications(baseNotifications)
+      const notificationsApi = new NotificationsApi(getApiConfig(token))
+      const response = await notificationsApi.getUserNotifications(1, 20)
+      
+      if (response.data && typeof response.data === 'object') {
+        const responseData = response.data as any
+        if (responseData.success && responseData.data) {
+          const apiNotifications = responseData.data.notifications || []
+          // Transform API data to our notification format
+          const transformedNotifications: Notification[] = apiNotifications.map((notif: any) => ({
+            id: notif.id?.toString() || Math.random().toString(),
+            title: notif.title || "Notification",
+            message: notif.message || notif.content || "Nouvelle notification",
+            type: (notif.type || "info") as "info" | "warning" | "success" | "error",
+            timestamp: notif.createdAt ? new Date(notif.createdAt) : new Date(),
+            read: notif.read || false,
+            actionUrl: notif.actionUrl || undefined,
+          }))
+          // Push into context for global sync
+          // Note: context refresh already loaded; keep this as a manual refresh fallback
+        } else {
+          // If no real notifications, show empty state
+          
+        }
+      } else {
+        
+      }
+    } catch (err: any) {
+      console.error("Error loading notifications:", err)
+      setError("Erreur lors du chargement des notifications")
+      // Fallback to empty state on error
+      
+    } finally {
+      setLoading(false)
     }
+  }
 
-    loadNotifications()
-  }, [userRole])
-
+  const notifications = ctxNotifications as any as Notification[]
   const unreadCount = notifications.filter((n) => !n.read).length
 
   const getNotificationIcon = (type: Notification["type"]) => {
@@ -144,9 +107,12 @@ export function NotificationsDropdown({ userRole = "user" }: NotificationsDropdo
     }
   }
 
-  const formatTimestamp = (timestamp: Date) => {
+  const formatTimestamp = (value: any) => {
+    if (!value) return ""
+    const date = value instanceof Date ? value : new Date(value)
+    if (isNaN(date.getTime())) return ""
     const now = new Date()
-    const diff = now.getTime() - timestamp.getTime()
+    const diff = now.getTime() - date.getTime()
     const minutes = Math.floor(diff / (1000 * 60))
     const hours = Math.floor(diff / (1000 * 60 * 60))
     const days = Math.floor(diff / (1000 * 60 * 60 * 24))
@@ -160,28 +126,57 @@ export function NotificationsDropdown({ userRole = "user" }: NotificationsDropdo
     }
   }
 
-  const markAsRead = (id: string) => {
-    setNotifications((prev) =>
-      prev.map((notification) => (notification.id === id ? { ...notification, read: true } : notification)),
-    )
+  const markAsRead = async (id: string) => {
+    try {
+      const token = localStorage.getItem("jwt_token")
+      if (!token) return
+
+      const notificationsApi = new NotificationsApi(getApiConfig(token))
+      await notificationsApi.markNotificationAsRead(parseInt(id))
+      markAsReadLocal(id)
+    } catch (err) {
+      console.error("Error marking notification as read:", err)
+      markAsReadLocal(id)
+    }
   }
 
   const markAsUnread = (id: string) => {
-    setNotifications((prev) =>
-      prev.map((notification) => (notification.id === id ? { ...notification, read: false } : notification)),
-    )
+    // For now, just update UI - API doesn't have unread functionality
+    // Local only toggle; backend has no unread API
+    
   }
 
-  const deleteNotification = (id: string) => {
-    setNotifications((prev) => prev.filter((notification) => notification.id !== id))
+  const deleteNotification = async (id: string) => {
+    try {
+      const token = localStorage.getItem("jwt_token")
+      if (!token) return
+
+      const notificationsApi = new NotificationsApi(getApiConfig(token))
+      await notificationsApi.deleteNotification(parseInt(id))
+      removeLocal(id)
+    } catch (err) {
+      console.error("Error deleting notification:", err)
+      removeLocal(id)
+    }
   }
 
-  const markAllAsRead = () => {
-    setNotifications((prev) => prev.map((notification) => ({ ...notification, read: true })))
+  const markAllAsRead = async () => {
+    try {
+      const token = localStorage.getItem("jwt_token")
+      if (!token) return
+
+      const notificationsApi = new NotificationsApi(getApiConfig(token))
+      await notificationsApi.markAllNotificationsAsRead()
+      notifications.forEach(n => markAsReadLocal(n.id))
+    } catch (err) {
+      console.error("Error marking all notifications as read:", err)
+      notifications.forEach(n => markAsReadLocal(n.id))
+    }
   }
 
   const clearAllNotifications = () => {
-    setNotifications([])
+    // This is a UI-only action - we don't have a clear all API endpoint
+    // UI only
   }
 
   const handleNotificationClick = (notification: Notification) => {
@@ -230,7 +225,25 @@ export function NotificationsDropdown({ userRole = "user" }: NotificationsDropdo
           <Separator />
           <CardContent className="p-0">
             <ScrollArea className="h-96">
-              {notifications.length === 0 ? (
+              {loading ? (
+                <div className="flex flex-col items-center justify-center py-8 text-gray-500">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mb-2"></div>
+                  <p className="text-sm">Chargement des notifications...</p>
+                </div>
+              ) : error ? (
+                <div className="flex flex-col items-center justify-center py-8 text-gray-500">
+                  <AlertTriangle className="h-8 w-8 mb-2 opacity-50" />
+                  <p className="text-sm">{error}</p>
+                  <Button 
+                    variant="ghost" 
+                    size="sm" 
+                    onClick={loadNotifications}
+                    className="mt-2"
+                  >
+                    Réessayer
+                  </Button>
+                </div>
+              ) : notifications.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-8 text-gray-500">
                   <Bell className="h-8 w-8 mb-2 opacity-50" />
                   <p className="text-sm">Aucune notification</p>
@@ -292,7 +305,7 @@ export function NotificationsDropdown({ userRole = "user" }: NotificationsDropdo
                           </div>
                           <p className="text-sm text-gray-600 mt-1">{notification.message}</p>
                           <div className="flex items-center justify-between mt-2">
-                            <span className="text-xs text-gray-500">{formatTimestamp(notification.timestamp)}</span>
+                            <span className="text-xs text-gray-500">{formatTimestamp((notification as any).timestamp || (notification as any).createdAt)}</span>
                             {notification.actionUrl && (
                               <Badge variant="outline" className="text-xs">
                                 Cliquer pour voir

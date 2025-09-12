@@ -11,6 +11,7 @@ import { Sidebar } from "@/components/sidebar"
 import { EventModal } from "@/components/event-modal"
 import { useToast } from "@/hooks/use-toast"
 import { useUser } from "@/contexts/UserContext"
+import { NotificationsDropdown } from "@/components/notifications-dropdown"
 
 interface Event {
   id: string
@@ -54,54 +55,22 @@ export default function AssignerCalendarPage() {
     loadEvents()
   }, [userData])
 
-  const loadEvents = () => {
-    const mockEvents: Event[] = [
-      {
-        id: "1",
-        title: "Attribution iPhone 15 Pro",
-        description: "Attribution d'un iPhone 15 Pro à Jean Dupont",
-        date: "2024-01-15",
-        time: "10:00",
-        type: "assignment",
-        participants: ["Jean Dupont", "Randy Riley"],
-        status: "scheduled",
-        priority: "medium",
-      },
-      {
-        id: "2",
-        title: "Retour Galaxy S22",
-        description: "Retour du Galaxy S22 de Pierre Martin",
-        date: "2024-01-16",
-        time: "14:30",
-        type: "return",
-        participants: ["Pierre Martin", "Randy Riley"],
-        status: "scheduled",
-        priority: "low",
-      },
-      {
-        id: "3",
-        title: "Maintenance Pixel 7",
-        description: "Réparation écran fissuré",
-        date: "2024-01-17",
-        time: "09:00",
-        type: "maintenance",
-        participants: ["Service Technique"],
-        status: "scheduled",
-        priority: "high",
-      },
-      {
-        id: "4",
-        title: "Réunion équipe",
-        description: "Point mensuel sur les attributions",
-        date: "2024-01-18",
-        time: "15:00",
-        type: "meeting",
-        participants: ["Randy Riley", "Marie Assignateur", "Admin Système"],
-        status: "scheduled",
-        priority: "medium",
-      },
-    ]
-    setEvents(mockEvents)
+  const loadEvents = async () => {
+    try {
+      const token = localStorage.getItem("jwt_token")
+      if (!token) {
+        console.warn("No token available for loading events")
+        setEvents([])
+        return
+      }
+
+      // For now, we'll use an empty array since we don't have a specific calendar events API
+      // In the future, this could be replaced with a real API call
+      setEvents([])
+    } catch (error) {
+      console.error("Error loading events:", error)
+      setEvents([])
+    }
   }
 
   const handleLogout = () => {
@@ -245,10 +214,7 @@ export default function AssignerCalendarPage() {
                   FR
                 </Button>
 
-                <Button variant="outline" size="sm" className="bg-white/50 relative">
-                  <Bell className="h-4 w-4" />
-                  <span className="absolute -top-1 -right-1 h-3 w-3 bg-red-500 rounded-full"></span>
-                </Button>
+                <NotificationsDropdown userRole="assigner" />
 
                 <div className="flex items-center space-x-3">
                   <Avatar className="h-8 w-8">

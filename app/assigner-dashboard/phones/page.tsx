@@ -15,6 +15,7 @@ import { PhoneManagementApi } from "@/api/generated/apis/phone-management-api"
 import { getApiConfig } from "@/lib/apiClient"
 import { useUser } from "@/contexts/UserContext"
 import { PhoneDto } from "@/api/generated/models"
+import { NotificationsDropdown } from "@/components/notifications-dropdown"
 import ExcelJS from 'exceljs'
 
 interface PhoneDevice {
@@ -77,7 +78,11 @@ export default function AssignerPhonesPage() {
     })
 
     fetchPhones()
-  }, [pagination.page, pagination.limit, statusFilter, searchTerm, userData])
+  }, [userData])
+
+  useEffect(() => {
+    filterPhones()
+  }, [phones, searchTerm, statusFilter])
 
   const fetchPhones = async () => {
     setLoading(true)
@@ -114,11 +119,11 @@ export default function AssignerPhonesPage() {
       })
 
       const res = await api.getPhones(
-        pagination.page,
-        pagination.limit,
-        statusParam,
+        1,
+        10000,
+        undefined, // status - we'll filter client-side
         undefined, // brand
-        searchTerm || undefined // model
+        undefined // model - we'll filter client-side
       )
 
       console.log("API Response:", res)
@@ -168,7 +173,6 @@ export default function AssignerPhonesPage() {
        }))
 
       setPhones(transformedPhones)
-      setFilteredPhones(transformedPhones)
 
       // Update pagination info
       if (paginationData.total !== undefined) {
@@ -197,6 +201,64 @@ export default function AssignerPhonesPage() {
       })
     } finally {
       setLoading(false)
+    }
+  }
+
+  const filterPhones = () => {
+    let filtered = phones
+
+    if (searchTerm) {
+      filtered = filtered.filter(
+        (phone) =>
+          phone.model.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          phone.brand.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          phone.imei.toLowerCase().includes(searchTerm.toLowerCase()),
+      )
+    }
+
+    if (statusFilter !== "all") {
+      // Map filter values to API status values
+      const statusMap: { [key: string]: string } = {
+        "available": "AVAILABLE",
+        "assigned": "ASSIGNED", 
+        "maintenance": "DAMAGED",
+        "retired": "LOST",
+        "suspendue": "BLOCKED"
+      }
+      const apiStatus = statusMap[statusFilter] || statusFilter.toUpperCase()
+      filtered = filtered.filter((phone) => {
+        // Convert frontend status back to API status for comparison
+        const phoneApiStatus = mapStatusToApi(phone.status)
+        return phoneApiStatus === apiStatus
+      })
+    }
+
+    setFilteredPhones(filtered)
+    
+    // Update pagination based on filtered results
+    const totalFiltered = filtered.length
+    setPagination(prev => ({
+      ...prev,
+      total: totalFiltered,
+      totalPages: Math.ceil(totalFiltered / prev.limit)
+    }))
+    
+    // Reset to page 1 when filtering
+    setPagination(prev => ({ ...prev, page: 1 }))
+  }
+
+  const mapStatusToApi = (frontendStatus: string): string => {
+    switch (frontendStatus) {
+      case "available":
+        return "AVAILABLE"
+      case "assigned":
+        return "ASSIGNED"
+      case "lost":
+        return "LOST"
+      case "damaged":
+        return "DAMAGED"
+      default:
+        return "AVAILABLE"
     }
   }
 
@@ -257,13 +319,19 @@ export default function AssignerPhonesPage() {
   ]
 
   const getStatusColor = (status: string) => {
-    const colors = {
-      available: "bg-green-100 text-green-800",
-      assigned: "bg-blue-100 text-blue-800",
-      lost: "bg-orange-100 text-orange-800",
-      damaged: "bg-red-100 text-red-800",
+    const s = (status || "").toString().toUpperCase()
+    switch (s) {
+      case "AVAILABLE":
+        return "bg-green-100 text-green-800"
+      case "ASSIGNED":
+        return "bg-blue-100 text-blue-800"
+      case "LOST":
+        return "bg-gray-200 text-gray-800"
+      case "DAMAGED":
+        return "bg-amber-100 text-amber-800"
+      default:
+        return "bg-gray-100 text-gray-800"
     }
-    return colors[status as keyof typeof colors] || "bg-gray-100 text-gray-800"
   }
 
   const getConditionColor = (condition: string) => {
@@ -562,10 +630,7 @@ export default function AssignerPhonesPage() {
                   FR
                 </Button>
 
-                <Button variant="outline" size="sm" className="bg-white/50 relative">
-                  <Bell className="h-4 w-4" />
-                  <span className="absolute -top-1 -right-1 h-3 w-3 bg-red-500 rounded-full"></span>
-                </Button>
+                <NotificationsDropdown userRole="assigner" />
 
                 <div className="flex items-center space-x-3">
                   <Avatar className="h-8 w-8">
@@ -605,6 +670,7 @@ export default function AssignerPhonesPage() {
                       <option value="assigned">Assigné</option>
                       <option value="lost">Perdu</option>
                       <option value="damaged">Endommagé</option>
+                      <option value="suspendue">Suspendue</option>
                     </select>
                     <Button 
                       variant="outline" 
@@ -690,26 +756,6 @@ export default function AssignerPhonesPage() {
                       }}
                     />
 
-                    {/* Pagination */}
-                    {pagination.totalPages > 1 && (
-                      <Pagination className="justify-end mt-4">
-                        <PaginationContent>
-                          <PaginationItem>
-                            <PaginationPrevious href="#" onClick={(e)=>{e.preventDefault(); handlePageChange(Math.max(1,pagination.page-1))}} />
-                          </PaginationItem>
-                          {getPageNumbers().map((p) => (
-                            <PaginationItem key={p}>
-                              <PaginationLink href="#" isActive={p===pagination.page} onClick={(e)=>{e.preventDefault(); handlePageChange(p)}}>
-                                {p}
-                              </PaginationLink>
-                            </PaginationItem>
-                          ))}
-                          <PaginationItem>
-                            <PaginationNext href="#" onClick={(e)=>{e.preventDefault(); handlePageChange(Math.min(pagination.totalPages,pagination.page+1))}} />
-                          </PaginationItem>
-                        </PaginationContent>
-                      </Pagination>
-                    )}
                   </>
                 )}
               </CardContent>

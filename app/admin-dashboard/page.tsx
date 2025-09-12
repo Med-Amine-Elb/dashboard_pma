@@ -26,6 +26,7 @@ import { ModernChart } from "@/components/modern-chart"
 import { NotificationCard } from "@/components/notification-card"
 import { TaskCard } from "@/components/task-card"
 import { PhoneModal } from "@/components/phone-modal"
+import { NotificationsDropdown } from "@/components/notifications-dropdown"
 import { useToast } from "@/hooks/use-toast"
 import { DashboardReportingApi } from "@/api/generated"
 import { getApiConfig } from "@/lib/apiClient"
@@ -346,10 +347,7 @@ export default function AdminDashboard() {
                   FR
                 </Button>
 
-                <Button variant="outline" size="sm" className="bg-white/50 relative">
-                  <Bell className="h-4 w-4" />
-                  <span className="absolute -top-1 -right-1 h-3 w-3 bg-red-500 rounded-full"></span>
-                </Button>
+                <NotificationsDropdown userRole="admin" />
 
                 <div className="flex items-center space-x-3">
                   <Avatar className="h-8 w-8">

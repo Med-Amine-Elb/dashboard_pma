@@ -15,6 +15,7 @@ import { useToast } from "@/hooks/use-toast"
 import { AttributionManagementApi, AttributionDtoStatusEnum } from "@/api/generated";
 import { getApiConfig } from "@/lib/apiClient";
 import { useUser } from "@/contexts/UserContext";
+import { NotificationsDropdown } from "@/components/notifications-dropdown"
 import ExcelJS from 'exceljs';
 
 interface Attribution {
@@ -80,7 +81,7 @@ export default function AttributionsPage() {
     })
 
     fetchAttributions()
-  }, [page, limit, statusFilter, userData])
+  }, [userData])
 
   useEffect(() => {
     filterAttributions()
@@ -112,7 +113,7 @@ export default function AttributionsPage() {
       console.log("API config:", getApiConfig(token))
       console.log("Fetching attributions...")
       
-      const res = await api.getAttributions(page, limit)
+      const res = await api.getAttributions(1, 10000)
       console.log("API Response:", res)
       console.log("Response data:", res.data)
       console.log("Response status:", res.status)
@@ -187,10 +188,25 @@ export default function AttributionsPage() {
     }
 
     if (statusFilter !== "all") {
-      filtered = filtered.filter((attribution) => attribution.status === statusFilter)
+      // Map filter values to API status values
+      const statusMap: { [key: string]: string } = {
+        "active": "ACTIVE",
+        "returned": "RETURNED", 
+        "pending": "PENDING"
+      }
+      const apiStatus = statusMap[statusFilter] || statusFilter.toUpperCase()
+      filtered = filtered.filter((attribution) => attribution.status === apiStatus)
     }
 
     setFilteredAttributions(filtered)
+    
+    // Update pagination based on filtered results
+    const totalFiltered = filtered.length
+    setTotal(totalFiltered)
+    setTotalPages(Math.ceil(totalFiltered / limit))
+    
+    // Reset to page 1 when filtering
+    setPage(1)
   }
 
   const handleLogout = () => {
@@ -324,12 +340,28 @@ export default function AttributionsPage() {
       
       if (selectedAttribution) {
         // Update existing attribution
+        const normalizeDate = (d?: string) => {
+          if (!d) return undefined
+          const trimmed = (d as string).trim()
+          // Handle DD / MM / YYYY or DD/MM/YYYY
+          const compact = trimmed.replace(/\s+/g, "")
+          const ddmmyyyy = compact.match(/^(\d{2})\/(\d{2})\/(\d{4})$/)
+          if (ddmmyyyy) {
+            const [, dd, mm, yyyy] = ddmmyyyy
+            return `${yyyy}-${mm}-${dd}`
+          }
+          // Already ISO YYYY-MM-DD
+          if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return trimmed
+          const parsed = new Date(trimmed)
+          if (!isNaN(parsed.getTime())) return parsed.toISOString().split("T")[0]
+          return undefined
+        }
         const updatePayload = {
           userId: attributionData.userId ? Number(attributionData.userId) : undefined,
           phoneId: attributionData.phoneId ? Number(attributionData.phoneId) : undefined,
           simCardId: attributionData.simCardId ? Number(attributionData.simCardId) : undefined,
-          assignmentDate: attributionData.assignmentDate || "",
-          returnDate: attributionData.returnDate || undefined,
+          assignmentDate: normalizeDate(attributionData.assignmentDate as any),
+          returnDate: normalizeDate(attributionData.returnDate as any),
           status: ((attributionData.status || "ACTIVE") as keyof typeof AttributionDtoStatusEnum) ? (attributionData.status as AttributionDtoStatusEnum) : AttributionDtoStatusEnum.Active,
           notes: attributionData.notes || undefined,
         };
@@ -652,10 +684,7 @@ export default function AttributionsPage() {
                   FR
                 </Button>
 
-                <Button variant="outline" size="sm" className="bg-white/50 relative">
-                  <Bell className="h-4 w-4" />
-                  <span className="absolute -top-1 -right-1 h-3 w-3 bg-red-500 rounded-full"></span>
-                </Button>
+                <NotificationsDropdown userRole="admin" />
 
                 <div className="flex items-center space-x-3">
                   <Avatar className="h-8 w-8">
@@ -754,28 +783,7 @@ export default function AttributionsPage() {
                     }
                       return attr[key as keyof Attribution] || "-"
                   }}
-                useExternalPagination
                 />
-                {/* Pagination */}
-                {totalPages > 1 && (
-                  <Pagination className="justify-end mt-4">
-                    <PaginationContent>
-                      <PaginationItem>
-                        <PaginationPrevious href="#" onClick={(e)=>{e.preventDefault(); setPage((p)=>Math.max(1,p-1))}} />
-                      </PaginationItem>
-                      {getPageNumbers().map((p) => (
-                        <PaginationItem key={p}>
-                          <PaginationLink href="#" isActive={p===page} onClick={(e)=>{e.preventDefault(); setPage(p)}}>
-                            {p}
-                          </PaginationLink>
-                        </PaginationItem>
-                      ))}
-                      <PaginationItem>
-                        <PaginationNext href="#" onClick={(e)=>{e.preventDefault(); setPage((p)=>Math.min(totalPages,p+1))}} />
-                      </PaginationItem>
-                    </PaginationContent>
-                  </Pagination>
-                )}
                 </>
                 )}
               </CardContent>
