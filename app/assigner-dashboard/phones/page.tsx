@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { Search, Bell, Globe, Phone, User, Eye, ChevronLeft, ChevronRight, Download } from "lucide-react"
+import { Search, Bell, Globe, Phone, User, Eye, ChevronLeft, ChevronRight, Download, History } from "lucide-react"
 import { Pagination, PaginationContent, PaginationItem, PaginationLink, PaginationNext, PaginationPrevious } from "@/components/ui/pagination"
 import { Sidebar } from "@/components/sidebar"
 import { DataTable } from "@/components/data-table"
@@ -16,6 +16,9 @@ import { getApiConfig } from "@/lib/apiClient"
 import { useUser } from "@/contexts/UserContext"
 import { PhoneDto } from "@/api/generated/models"
 import { NotificationsDropdown } from "@/components/notifications-dropdown"
+import { AssignmentHistoryModal } from "@/components/assignment-history-modal"
+import { AssignmentHistoryApi } from "@/api/generated/apis/assignment-history-api"
+import { UserManagementApi } from "@/api/generated/apis/user-management-api"
 import ExcelJS from 'exceljs'
 
 interface PhoneDevice {
@@ -33,6 +36,19 @@ interface PhoneDevice {
   storage: string
   color: string
   price: number
+  notes?: string
+}
+
+interface AssignmentHistoryItem {
+  id: string
+  simCardId: string
+  phoneId?: string
+  userId: string
+  userName?: string
+  assignedBy: string
+  assignmentDate: string
+  returnDate?: string
+  status: "active" | "returned" | "expired"
   notes?: string
 }
 
@@ -59,6 +75,8 @@ export default function AssignerPhonesPage() {
     totalPages: 0,
   })
   const { toast } = useToast()
+  const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false)
+  const [selectedPhoneHistory, setSelectedPhoneHistory] = useState<AssignmentHistoryItem[]>([])
 
   useEffect(() => {
     // Check authentication
@@ -316,6 +334,7 @@ export default function AssignerPhonesPage() {
     { key: "condition", label: "État" },
     { key: "price", label: "Prix" },
     { key: "purchaseDate", label: "Date d'achat" },
+    { key: "actions", label: "Actions" },
   ]
 
   const getStatusColor = (status: string) => {
@@ -752,6 +771,68 @@ export default function AssignerPhonesPage() {
                         if (key === "purchaseDate") {
                           return new Date(phone.purchaseDate).toLocaleDateString("fr-FR")
                         }
+                        if (key === "actions") {
+                          return (
+                            <div className="flex items-center space-x-2">
+                              <Button size="sm" variant="outline" onClick={async (e) => {
+                                e.stopPropagation()
+                                try {
+                                  const token = localStorage.getItem("jwt_token")
+                                  if (!token) {
+                                    toast({ title: "Erreur", description: "Token d'authentification manquant", variant: "destructive" })
+                                    return
+                                  }
+                                  const historyApi = new AssignmentHistoryApi(getApiConfig(token))
+                                  const usersApi = new UserManagementApi(getApiConfig(token))
+                                  const res = await historyApi.getPhoneHistory(parseInt(phone.id))
+                                  const list: any[] = Array.isArray((res.data as any)?.data) ? (res.data as any).data : (res.data as any) || []
+                                  const userIdSet = new Set<number>()
+                                  ;(list as any[]).forEach((h: any) => {
+                                    if (h.toUserId) userIdSet.add(Number(h.toUserId))
+                                    if (h.fromUserId) userIdSet.add(Number(h.fromUserId))
+                                  })
+                                  const userIdToName = new Map<number, string>()
+                                  await Promise.all(Array.from(userIdSet).map(async (uid) => {
+                                    try {
+                                      const ures = await usersApi.getUserById(uid)
+                                      const udata: any = (ures.data as any)?.data || (ures.data as any)
+                                      const name = udata?.name || udata?.fullName || udata?.username || `Utilisateur ${uid}`
+                                      userIdToName.set(uid, name)
+                                    } catch {
+                                      userIdToName.set(uid, `Utilisateur ${uid}`)
+                                    }
+                                  }))
+
+                                  const mapped: AssignmentHistoryItem[] = (list as any[]).map((h: any) => {
+                                    const action = String(h.action || "ASSIGN").toUpperCase()
+                                    const isReturn = action === "UNASSIGN" || action === "RETURN"
+                                    const toId = h.toUserId ? Number(h.toUserId) : undefined
+                                    const fromId = h.fromUserId ? Number(h.fromUserId) : undefined
+                                    return {
+                                      id: String(h.id ?? crypto.randomUUID()),
+                                      simCardId: "",
+                                      phoneId: phone.id,
+                                      userId: String(toId ?? fromId ?? ""),
+                                      userName: toId ? (userIdToName.get(toId) || `Utilisateur ${toId}`) : undefined,
+                                      assignedBy: fromId ? (userIdToName.get(fromId) || `Utilisateur ${fromId}`) : "Système",
+                                      assignmentDate: h.date || new Date().toISOString(),
+                                      returnDate: isReturn ? (h.date || new Date().toISOString()) : undefined,
+                                      status: isReturn ? "returned" : "active",
+                                      notes: h.notes || "",
+                                    }
+                                  })
+                                  setSelectedPhoneHistory(mapped)
+                                  setIsHistoryModalOpen(true)
+                                } catch (err) {
+                                  console.error("Error loading phone history:", err)
+                                  toast({ title: "Erreur", description: "Impossible de charger l'historique", variant: "destructive" })
+                                }
+                              }}>
+                                <History className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          )
+                        }
                         return phone[key as keyof PhoneDevice] || "-"
                       }}
                     />
@@ -763,6 +844,11 @@ export default function AssignerPhonesPage() {
           </div>
         </div>
       </div>
+      <AssignmentHistoryModal
+        isOpen={isHistoryModalOpen}
+        onClose={() => setIsHistoryModalOpen(false)}
+        history={selectedPhoneHistory}
+      />
     </div>
   )
 }

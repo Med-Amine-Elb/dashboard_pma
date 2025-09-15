@@ -14,6 +14,8 @@ import { SimCardModal } from "@/components/sim-card-modal"
 import { AssignmentHistoryModal } from "@/components/assignment-history-modal"
 import { useToast } from "@/hooks/use-toast"
 import { SIMCardManagementApi } from "@/api/generated";
+import { AssignmentHistoryApi } from "@/api/generated/apis/assignment-history-api"
+import { UserManagementApi } from "@/api/generated/apis/user-management-api"
 import { getApiConfig } from "@/lib/apiClient";
 import { useUser } from "@/contexts/UserContext";
 import { NotificationsDropdown } from "@/components/notifications-dropdown"
@@ -40,6 +42,7 @@ interface AssignmentHistory {
   simCardId: string
   phoneId?: string
   userId: string
+  userName?: string
   assignedBy: string
   assignmentDate: string
   returnDate?: string
@@ -340,10 +343,59 @@ export default function SimCardsPage() {
     }
   }
 
-  const handleViewHistory = (sim: SimCard) => {
-    const history = assignmentHistory.filter((h) => h.simCardId === sim.id)
-    setSelectedSimHistory(history)
-    setIsHistoryModalOpen(true)
+  const handleViewHistory = async (sim: SimCard) => {
+    try {
+      const token = localStorage.getItem("jwt_token")
+      if (!token) {
+        toast({ title: "Erreur", description: "Token d'authentification manquant", variant: "destructive" })
+        return
+      }
+      const historyApi = new AssignmentHistoryApi(getApiConfig(token))
+      const usersApi = new UserManagementApi(getApiConfig(token))
+      const res = await historyApi.getSimHistory(parseInt(sim.id))
+      const list: any[] = Array.isArray((res.data as any)?.data) ? (res.data as any).data : (res.data as any) || []
+
+      const userIdSet = new Set<number>()
+      ;(list as any[]).forEach((h: any) => {
+        if (h.toUserId) userIdSet.add(Number(h.toUserId))
+        if (h.fromUserId) userIdSet.add(Number(h.fromUserId))
+      })
+      const userIdToName = new Map<number, string>()
+      await Promise.all(Array.from(userIdSet).map(async (uid) => {
+        try {
+          const ures = await usersApi.getUserById(uid)
+          const udata: any = (ures.data as any)?.data || (ures.data as any)
+          const name = udata?.name || udata?.fullName || udata?.username || `Utilisateur ${uid}`
+          userIdToName.set(uid, name)
+        } catch {
+          userIdToName.set(uid, `Utilisateur ${uid}`)
+        }
+      }))
+
+      const mapped: AssignmentHistory[] = (list as any[]).map((h: any) => {
+        const action = String(h.action || "ASSIGN").toUpperCase()
+        const isReturn = action === "UNASSIGN" || action === "RETURN"
+        const toId = h.toUserId ? Number(h.toUserId) : undefined
+        const fromId = h.fromUserId ? Number(h.fromUserId) : undefined
+        return {
+          id: String(h.id ?? crypto.randomUUID()),
+          simCardId: sim.id,
+          phoneId: undefined,
+          userId: String(toId ?? fromId ?? ""),
+          userName: toId ? (userIdToName.get(toId) || `Utilisateur ${toId}`) : undefined,
+          assignedBy: fromId ? (userIdToName.get(fromId) || `Utilisateur ${fromId}`) : "Système",
+          assignmentDate: h.date || new Date().toISOString(),
+          returnDate: isReturn ? (h.date || new Date().toISOString()) : undefined,
+          status: isReturn ? "returned" : "active",
+          notes: h.notes || "",
+        }
+      })
+      setSelectedSimHistory(mapped)
+      setIsHistoryModalOpen(true)
+    } catch (err) {
+      console.error("Error loading SIM history:", err)
+      toast({ title: "Erreur", description: "Impossible de charger l'historique", variant: "destructive" })
+    }
   }
 
   const handleSaveSim = async (simData: Partial<SimCard>) => {

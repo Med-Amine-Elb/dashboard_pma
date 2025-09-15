@@ -14,6 +14,8 @@ import { SimAssignmentModal } from "@/components/sim-assignment-modal"
 import { AssignmentHistoryModal } from "@/components/assignment-history-modal"
 import { useToast } from "@/hooks/use-toast"
 import { SIMCardManagementApi } from "@/api/generated/apis/simcard-management-api"
+import { AssignmentHistoryApi } from "@/api/generated/apis/assignment-history-api"
+import { UserManagementApi } from "@/api/generated/apis/user-management-api"
 import { getApiConfig } from "@/lib/apiClient"
 import { useUser } from "@/contexts/UserContext"
 import { SimCardDto } from "@/api/generated/models"
@@ -286,21 +288,8 @@ export default function SimAssignmentsPage() {
   }
 
   const loadAssignmentHistory = async () => {
-    try {
-      const token = localStorage.getItem("jwt_token")
-      if (!token) {
-        console.warn("No token available for loading assignment history")
-        setAssignmentHistory([])
-        return
-      }
-
-      // For now, we'll use an empty array since we don't have a specific assignment history API
-      // In the future, this could be replaced with a real API call
-      setAssignmentHistory([])
-    } catch (error) {
-      console.error("Error loading assignment history:", error)
-      setAssignmentHistory([])
-    }
+    // Deprecated: history now loads per item on demand
+    setAssignmentHistory([])
   }
 
   const handleLogout = () => {
@@ -313,10 +302,60 @@ export default function SimAssignmentsPage() {
     setIsAssignmentModalOpen(true)
   }
 
-  const handleViewHistory = (sim: SimCard) => {
-    const history = assignmentHistory.filter((h) => h.simCardId === sim.id)
-    setSelectedSimHistory(history)
-    setIsHistoryModalOpen(true)
+  const handleViewHistory = async (sim: SimCard) => {
+    try {
+      const token = localStorage.getItem("jwt_token")
+      if (!token) {
+        toast({ title: "Erreur", description: "Token d'authentification manquant", variant: "destructive" })
+        return
+      }
+      const historyApi = new AssignmentHistoryApi(getApiConfig(token))
+      const usersApi = new UserManagementApi(getApiConfig(token))
+      const res = await historyApi.getSimHistory(parseInt(sim.id))
+      const list: any[] = Array.isArray((res.data as any)?.data) ? (res.data as any).data : (res.data as any) || []
+
+      // Build user names cache
+      const userIdSet = new Set<number>()
+      ;(list as any[]).forEach((h: any) => {
+        if (h.toUserId) userIdSet.add(Number(h.toUserId))
+        if (h.fromUserId) userIdSet.add(Number(h.fromUserId))
+      })
+      const userIdToName = new Map<number, string>()
+      await Promise.all(Array.from(userIdSet).map(async (uid) => {
+        try {
+          const ures = await usersApi.getUserById(uid)
+          const udata: any = (ures.data as any)?.data || (ures.data as any)
+          const name = udata?.name || udata?.fullName || udata?.username || `Utilisateur ${uid}`
+          userIdToName.set(uid, name)
+        } catch {
+          userIdToName.set(uid, `Utilisateur ${uid}`)
+        }
+      }))
+
+      const mapped: AssignmentHistory[] = (list as any[]).map((h: any) => {
+        const action = String(h.action || "ASSIGN").toUpperCase()
+        const isReturn = action === "UNASSIGN" || action === "RETURN"
+        const toId = h.toUserId ? Number(h.toUserId) : undefined
+        const fromId = h.fromUserId ? Number(h.fromUserId) : undefined
+        return {
+          id: String(h.id ?? crypto.randomUUID()),
+          simCardId: sim.id,
+          phoneId: undefined,
+          userId: String(toId ?? fromId ?? ""),
+          userName: toId ? (userIdToName.get(toId) || `Utilisateur ${toId}`) : undefined as unknown as string,
+          assignedBy: fromId ? (userIdToName.get(fromId) || `Utilisateur ${fromId}`) : "Système",
+          assignmentDate: !isReturn ? (h.date || new Date().toISOString()) : (h.date || new Date().toISOString()),
+          returnDate: isReturn ? (h.date || new Date().toISOString()) : undefined,
+          status: isReturn ? "returned" : "active",
+          notes: h.notes || "",
+        }
+      })
+      setSelectedSimHistory(mapped)
+      setIsHistoryModalOpen(true)
+    } catch (err) {
+      console.error("Error loading SIM history:", err)
+      toast({ title: "Erreur", description: "Impossible de charger l'historique", variant: "destructive" })
+    }
   }
 
   const handleReturnSim = async (simId: string) => {
