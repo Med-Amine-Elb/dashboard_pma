@@ -71,7 +71,11 @@ const columns = [
   { id: "done", title: "Terminé", color: "bg-green-100" },
 ]
 
-export function KanbanBoard() {
+interface KanbanBoardProps {
+  searchTerm?: string
+}
+
+export function KanbanBoard({ searchTerm = "" }: KanbanBoardProps) {
   const [tasks, setTasks] = useState<Task[]>(initialTasks)
   const [selectedTask, setSelectedTask] = useState<Task | null>(null)
   const [showTaskDetails, setShowTaskDetails] = useState(false)
@@ -126,7 +130,18 @@ export function KanbanBoard() {
   }
 
   const getTasksByStatus = (status: string) => {
-    return tasks.filter((task) => task.status === status)
+    return tasks.filter((task) => {
+      const matchesStatus = task.status === status
+      if (!searchTerm) return matchesStatus
+      
+      const lowSearch = searchTerm.toLowerCase()
+      const matchesSearch = 
+        task.title.toLowerCase().includes(lowSearch) ||
+        task.description.toLowerCase().includes(lowSearch) ||
+        task.assignee.toLowerCase().includes(lowSearch)
+      
+      return matchesStatus && matchesSearch
+    })
   }
 
   return (

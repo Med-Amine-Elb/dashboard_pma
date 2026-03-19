@@ -29,7 +29,7 @@ import {
 import { Sidebar } from "@/components/sidebar"
 import { NotificationsDropdown } from "@/components/notifications-dropdown"
 import { useRouter } from "next/navigation"
-import { UserManagementApi } from "@/api/generated"
+import { UserManagementApi } from "@/api/generated/apis/user-management-api";
 import { getApiConfig } from "@/lib/apiClient"
 import { useUser } from "@/contexts/UserContext"
 

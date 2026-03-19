@@ -18,19 +18,9 @@ import {
   Settings,
   BookMarkedIcon as MarkAsUnread,
 } from "lucide-react"
-import { NotificationsApi } from "@/api/generated"
-import { getApiConfig } from "@/lib/apiClient"
 import { useNotifications } from "@/contexts/NotificationsContext"
-
-interface Notification {
-  id: string
-  title: string
-  message: string
-  type: "info" | "warning" | "success" | "error"
-  timestamp: Date
-  read: boolean
-  actionUrl?: string
-}
+import { NotificationsApi } from "@/api/generated/apis/notifications-api";
+import { getApiConfig } from "@/lib/apiClient"
 
 interface NotificationsDropdownProps {
   userRole?: "admin" | "assigner" | "user"
@@ -38,63 +28,14 @@ interface NotificationsDropdownProps {
 
 export function NotificationsDropdown({ userRole = "user" }: NotificationsDropdownProps) {
   const [isOpen, setIsOpen] = useState(false)
-  const { notifications: ctxNotifications, loading, error, refresh, markAsReadLocal, removeLocal } = useNotifications()
+  const { notifications, loading, error, unreadCount, refresh, markAsReadLocal, removeLocal } =
+    useNotifications()
 
   useEffect(() => {
     refresh()
   }, [userRole, refresh])
 
-  const loadNotifications = async () => {
-    setLoading(true)
-    setError(null)
-    
-    try {
-      const token = localStorage.getItem("jwt_token")
-      if (!token) {
-        setError("Token d'authentification manquant")
-        return
-      }
-
-      const notificationsApi = new NotificationsApi(getApiConfig(token))
-      const response = await notificationsApi.getUserNotifications(1, 20)
-      
-      if (response.data && typeof response.data === 'object') {
-        const responseData = response.data as any
-        if (responseData.success && responseData.data) {
-          const apiNotifications = responseData.data.notifications || []
-          // Transform API data to our notification format
-          const transformedNotifications: Notification[] = apiNotifications.map((notif: any) => ({
-            id: notif.id?.toString() || Math.random().toString(),
-            title: notif.title || "Notification",
-            message: notif.message || notif.content || "Nouvelle notification",
-            type: (notif.type || "info") as "info" | "warning" | "success" | "error",
-            timestamp: notif.createdAt ? new Date(notif.createdAt) : new Date(),
-            read: notif.read || false,
-            actionUrl: notif.actionUrl || undefined,
-          }))
-          // Push into context for global sync
-          // Note: context refresh already loaded; keep this as a manual refresh fallback
-        } else {
-          // If no real notifications, show empty state
-          
-        }
-      } else {
-        
-      }
-    } catch (err: any) {
-      console.error("Error loading notifications:", err)
-      setError("Erreur lors du chargement des notifications")
-      // Fallback to empty state on error
-      
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const notifications = ctxNotifications as any as Notification[]
-  const unreadCount = notifications.filter((n) => !n.read).length
-
-  const getNotificationIcon = (type: Notification["type"]) => {
+  const getNotificationIcon = (type: (typeof notifications)[number]["type"]) => {
     switch (type) {
       case "success":
         return <CheckCircle className="h-4 w-4 text-green-500" />
@@ -132,7 +73,7 @@ export function NotificationsDropdown({ userRole = "user" }: NotificationsDropdo
       if (!token) return
 
       const notificationsApi = new NotificationsApi(getApiConfig(token))
-      await notificationsApi.markNotificationAsRead(parseInt(id))
+      await notificationsApi.markAsRead(parseInt(id))
       markAsReadLocal(id)
     } catch (err) {
       console.error("Error marking notification as read:", err)
@@ -141,9 +82,13 @@ export function NotificationsDropdown({ userRole = "user" }: NotificationsDropdo
   }
 
   const markAsUnread = (id: string) => {
-    // For now, just update UI - API doesn't have unread functionality
     // Local only toggle; backend has no unread API
-    
+    const notification = notifications.find(n => n.id === id)
+    if (notification) {
+      // We don't have a markAsUnreadLocal, but we can simulate it if needed
+      // or just leave it as a placeholder if the context doesn't support it.
+      // Looking at useNotifications, it only has markAsReadLocal.
+    }
   }
 
   const deleteNotification = async (id: string) => {
@@ -166,7 +111,7 @@ export function NotificationsDropdown({ userRole = "user" }: NotificationsDropdo
       if (!token) return
 
       const notificationsApi = new NotificationsApi(getApiConfig(token))
-      await notificationsApi.markAllNotificationsAsRead()
+      await notificationsApi.markAllAsRead()
       notifications.forEach(n => markAsReadLocal(n.id))
     } catch (err) {
       console.error("Error marking all notifications as read:", err)
@@ -175,11 +120,11 @@ export function NotificationsDropdown({ userRole = "user" }: NotificationsDropdo
   }
 
   const clearAllNotifications = () => {
-    // This is a UI-only action - we don't have a clear all API endpoint
-    // UI only
+    // Local only clear
+    notifications.forEach(n => removeLocal(n.id))
   }
 
-  const handleNotificationClick = (notification: Notification) => {
+  const handleNotificationClick = (notification: (typeof notifications)[number]) => {
     markAsRead(notification.id)
     if (notification.actionUrl) {
       window.location.href = notification.actionUrl
@@ -237,7 +182,7 @@ export function NotificationsDropdown({ userRole = "user" }: NotificationsDropdo
                   <Button 
                     variant="ghost" 
                     size="sm" 
-                    onClick={loadNotifications}
+                    onClick={refresh}
                     className="mt-2"
                   >
                     Réessayer
@@ -305,7 +250,7 @@ export function NotificationsDropdown({ userRole = "user" }: NotificationsDropdo
                           </div>
                           <p className="text-sm text-gray-600 mt-1">{notification.message}</p>
                           <div className="flex items-center justify-between mt-2">
-                            <span className="text-xs text-gray-500">{formatTimestamp((notification as any).timestamp || (notification as any).createdAt)}</span>
+                            <span className="text-xs text-gray-500">{formatTimestamp((notification as any).createdAt)}</span>
                             {notification.actionUrl && (
                               <Badge variant="outline" className="text-xs">
                                 Cliquer pour voir

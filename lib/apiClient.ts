@@ -1,8 +1,9 @@
-import { Configuration } from '@/api/generated';
+import { Configuration } from "@/api/generated/configuration";
 
 export function getApiConfig(token: string | null) {
+  const basePath = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8080/api';
   return new Configuration({
-    basePath: 'http://localhost:8080/api',
+    basePath,
     baseOptions: {
       headers: token
         ? { Authorization: `Bearer ${token}` }

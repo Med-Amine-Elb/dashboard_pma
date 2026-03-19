@@ -1,6 +1,7 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useMemo } from "react"
+import useSWR from "swr"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -19,169 +20,217 @@ import {
   Phone,
   Clock,
   AlertTriangle,
+  ClipboardList,
 } from "lucide-react"
 import { Sidebar } from "@/components/sidebar"
 import { StatsCard } from "@/components/stats-card"
-import { ModernChart } from "@/components/modern-chart"
+import dynamic from "next/dynamic"
 import { NotificationCard } from "@/components/notification-card"
 import { TaskCard } from "@/components/task-card"
 import { PhoneModal } from "@/components/phone-modal"
-import { NotificationsDropdown } from "@/components/notifications-dropdown"
+import { DashboardHeader } from "@/components/dashboard-header"
 import { useToast } from "@/hooks/use-toast"
-import { DashboardReportingApi } from "@/api/generated"
+
+// Dynamically import ECharts to avoid SSR issues
+const ReactECharts = dynamic(() => import("echarts-for-react"), { ssr: false })
+import { DashboardReportingApi } from "@/api/generated/apis/dashboard-reporting-api";
 import { getApiConfig } from "@/lib/apiClient"
 import { useUser } from "@/contexts/UserContext"
+import { clearAuthCookies } from "@/lib/authCookies"
+
+const fetcher = async () => {
+  const token = localStorage.getItem("jwt_token")
+  if (!token) throw new Error("No authentication token found")
+
+  const dashboardApi = new DashboardReportingApi(getApiConfig(token))
+  let overviewRes, phoneStatsRes, userStatsRes, simCardStatsRes, recentActivityRes, alertsRes;
+  try {
+    [overviewRes, phoneStatsRes, userStatsRes, simCardStatsRes, recentActivityRes, alertsRes] = await Promise.all([
+      dashboardApi.getDashboardOverview(),
+      dashboardApi.getPhoneStats(),
+      dashboardApi.getUserStats(),
+      dashboardApi.getSimCardStats(),
+      dashboardApi.getRecentActivity(10),
+      dashboardApi.getAlerts(),
+    ])
+  } catch (error: any) {
+    if (error?.response?.status === 401 || error?.response?.status === 403) {
+      clearAuthCookies();
+      localStorage.removeItem("jwt_token");
+      localStorage.removeItem("userRole");
+      window.location.href = "/";
+    }
+    throw error;
+  }
+
+  return {
+    overviewData: (overviewRes.data as any)?.data || {},
+    phoneData: (phoneStatsRes.data as any)?.data || {},
+    userData: (userStatsRes.data as any)?.data || {},
+    simCardData: (simCardStatsRes.data as any)?.data || {},
+    recentActivityData: (recentActivityRes.data as any)?.data?.recentActivities || [],
+    alertsData: (alertsRes.data as any)?.data || []
+  }
+}
 
 export default function AdminDashboard() {
   const { userData } = useUser()
   const [isPhoneModalOpen, setIsPhoneModalOpen] = useState(false)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+  const [searchTerm, setSearchTerm] = useState("")
   const { toast } = useToast()
 
-  // Dashboard data state
-  const [dashboardStats, setDashboardStats] = useState({
-    totalPhones: 0,
-    assignedPhones: 0,
-    availablePhones: 0,
-    maintenancePhones: 0,
-    totalUsers: 0,
-    totalSimCards: 0,
-    activeAttributions: 0,
-    pendingRequests: 0,
-    totalCost: 0,
+  const { data, error: swrError, isLoading, mutate } = useSWR('adminDashboardData', fetcher, {
+    revalidateOnFocus: true,
+    refreshInterval: 60000
   })
 
-  const [chartData, setChartData] = useState({
-    monthlyAttributions: [] as Array<{ name: string; value1: number; value2: number }>,
-    departmentStats: [] as Array<{ name: string; value1: number; value2: number }>,
-    progressData: [] as Array<{ name: string; value1: number; value: number }>,
-  })
+  const loading = isLoading && !data
+  const error = swrError?.message || null
 
-  const [notifications, setNotifications] = useState({
-    newRequests: 0,
-    pendingReturns: 0,
-    scheduledMaintenance: 0,
-  })
-
-  const [recentTasks, setRecentTasks] = useState<Array<{
-    title: string
-    time: string
-    color: string
-  }>>([])
-
-  const [alerts, setAlerts] = useState<Array<{
-    type: string
-    message: string
-    count: number
-  }>>([])
-
-  useEffect(() => {
-    // Check authentication
-    const isAuthenticated = localStorage.getItem("isAuthenticated")
-    const userRole = localStorage.getItem("userRole")
-
-    if (!isAuthenticated || userRole !== "admin") {
-      window.location.href = "/"
-      return
-    }
-
-    fetchDashboardData()
-  }, [])
-
-  const fetchDashboardData = async () => {
-    setLoading(true)
-    setError(null)
+  const dashboardStats = useMemo(() => {
+    if (!data) return { totalPhones: 0, assignedPhones: 0, availablePhones: 0, maintenancePhones: 0, totalUsers: 0, totalSimCards: 0, activeAttributions: 0, pendingRequests: 0, totalCost: 0 }
     
-    try {
-      const token = localStorage.getItem("jwt_token")
-      if (!token) {
-        throw new Error("No authentication token found")
-      }
-
-      const dashboardApi = new DashboardReportingApi(getApiConfig(token))
-
-      // Fetch all dashboard data in parallel
-      const [overviewRes, phoneStatsRes, userStatsRes, simCardStatsRes, recentActivityRes, alertsRes] = await Promise.all([
-        dashboardApi.getDashboardOverview(),
-        dashboardApi.getPhoneStats(),
-        dashboardApi.getUserStats(),
-        dashboardApi.getSimCardStats(),
-        dashboardApi.getRecentActivity(10),
-        dashboardApi.getAlerts(),
-      ])
-
-      // Process overview data
-      const overview = overviewRes.data as any
-      const overviewData = overview?.data || {}
-      
-      // Process phone stats
-      const phoneStats = phoneStatsRes.data as any
-      const phoneData = phoneStats?.data || {}
-      
-      // Process user stats
-      const userStats = userStatsRes.data as any
-      const userData = userStats?.data || {}
-      
-      // Process SIM card stats
-      const simCardStats = simCardStatsRes.data as any
-      const simCardData = simCardStats?.data || {}
-
-      // Update dashboard stats
-      setDashboardStats({
-        totalPhones: overviewData.totals?.phones || 0,
-        assignedPhones: overviewData.assigned?.phones || 0,
-        availablePhones: overviewData.available?.phones || 0,
-        maintenancePhones: (overviewData.totals?.phones || 0) - (overviewData.assigned?.phones || 0) - (overviewData.available?.phones || 0),
-        totalUsers: overviewData.totals?.users || 0,
-        totalSimCards: simCardData.totalSimCards || overviewData.totals?.simCards || 0,
-        activeAttributions: overviewData.assigned?.phones || 0,
-        pendingRequests: overviewData.pendingRequests || 0,
-        totalCost: calculateTotalCost(phoneData, simCardData),
-      })
-
-      // Update chart data
-      setChartData({
-        monthlyAttributions: generateMonthlyData(overviewData),
-        departmentStats: generateDepartmentData(phoneData, userData, overviewData, simCardData),
-        progressData: generateProgressData(overviewData),
-      })
-
-      // Update notifications - using real data from overview
-      setNotifications({
-        newRequests: overviewData.pendingRequests || 0,
-        pendingReturns: overviewData.pendingReturns || 0,
-        scheduledMaintenance: overviewData.scheduledMaintenance || 0,
-      })
-
-      // Process recent activity
-      const recentActivity = recentActivityRes.data as any
-      const activities = recentActivity?.data?.recentActivities || []
-      setRecentTasks(activities.slice(0, 3).map((activity: any, index: number) => ({
-        title: activity.description || `Activité ${index + 1}`,
-        time: formatTime(activity.date),
-        color: getTaskColor(index),
-      })))
-
-      // Process alerts
-      const alertsData = alertsRes.data as any
-      setAlerts(alertsData?.data || [])
-
-    } catch (err: any) {
-      console.error("Error fetching dashboard data:", err)
-      setError(err.message || "Failed to load dashboard data")
-    } finally {
-      setLoading(false)
+    const { overviewData, phoneData, simCardData } = data as any
+    return {
+      totalPhones: overviewData.totals?.phones || 0,
+      assignedPhones: overviewData.assigned?.phones || 0,
+      availablePhones: overviewData.available?.phones || 0,
+      maintenancePhones: (overviewData.totals?.phones || 0) - (overviewData.assigned?.phones || 0) - (overviewData.available?.phones || 0),
+      totalUsers: overviewData.totals?.users || 0,
+      totalSimCards: simCardData.totalSimCards || overviewData.totals?.simCards || 0,
+      activeAttributions: overviewData.assigned?.phones || 0,
+      pendingRequests: overviewData.pendingRequests || 0,
+      totalCost: calculateTotalCost(phoneData, simCardData),
     }
-  }
+  }, [data])
+
+  const chartData = useMemo(() => {
+    if (!data) return { monthlyOption: {}, departmentOption: {}, progressOption: {} }
+    
+    const monthlyAttributions = generateMonthlyData(data.overviewData)
+    const departmentStats = generateDepartmentData(data.phoneData, data.userData, data.overviewData, data.simCardData)
+    const progressData = generateProgressData(data.overviewData)
+
+    return {
+      monthlyOption: {
+        tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
+        legend: { data: ['Attributions', 'Retours'], bottom: 0 },
+        grid: { left: '3%', right: '4%', bottom: '15%', containLabel: true },
+        xAxis: { type: 'category', data: monthlyAttributions.map((m: any) => m.name) },
+        yAxis: { type: 'value' },
+        series: [
+          {
+            name: 'Attributions',
+            type: 'line',
+            smooth: true,
+            data: monthlyAttributions.map((m: any) => m.value1),
+            itemStyle: { color: '#3B82F6' },
+            areaStyle: {
+              color: {
+                type: 'linear', x: 0, y: 0, x2: 0, y2: 1,
+                colorStops: [{ offset: 0, color: 'rgba(59, 130, 246, 0.4)' }, { offset: 1, color: 'rgba(59, 130, 246, 0)' }]
+              }
+            }
+          },
+          {
+            name: 'Retours',
+            type: 'line',
+            smooth: true,
+            data: monthlyAttributions.map((m: any) => m.value2),
+            itemStyle: { color: '#F59E0B' },
+            areaStyle: {
+              color: {
+                type: 'linear', x: 0, y: 0, x2: 0, y2: 1,
+                colorStops: [{ offset: 0, color: 'rgba(245, 158, 11, 0.4)' }, { offset: 1, color: 'rgba(245, 158, 11, 0)' }]
+              }
+            }
+          }
+        ]
+      },
+      departmentOption: {
+        tooltip: { trigger: 'axis' },
+        grid: { left: '3%', right: '4%', bottom: '3%', containLabel: true },
+        xAxis: { type: 'value' },
+        yAxis: { type: 'category', data: departmentStats.map((d: any) => d.name) },
+        series: [
+          {
+            name: 'Téléphones Assignés',
+            type: 'bar',
+            data: departmentStats.map((d: any) => d.value1),
+            itemStyle: { 
+              borderRadius: [0, 4, 4, 0],
+              color: {
+                type: 'linear', x: 0, y: 0, x2: 1, y2: 0,
+                colorStops: [{ offset: 0, color: '#3B82F6' }, { offset: 1, color: '#60A5FA' }]
+              }
+            }
+          }
+        ]
+      },
+      progressOption: {
+        tooltip: { trigger: 'item' },
+        series: [
+          {
+            name: 'Attribution',
+            type: 'pie',
+            radius: ['70%', '90%'],
+            avoidLabelOverlap: false,
+            label: { show: false },
+            data: progressData.map(p => ({ value: p.value1, name: p.name })),
+            itemStyle: {
+              borderRadius: 10,
+              borderColor: '#fff',
+              borderWidth: 2,
+              color: (params: any) => params.dataIndex === 0 ? '#8B5CF6' : '#E5E7EB'
+            }
+          }
+        ]
+      }
+    }
+  }, [data])
+
+  const notifications = useMemo(() => {
+    const d = data as any
+    return {
+      newRequests: d?.overviewData?.pendingRequests || 0,
+      pendingReturns: d?.overviewData?.pendingReturns || 0,
+      scheduledMaintenance: d?.overviewData?.scheduledMaintenance || 0,
+    }
+  }, [data])
+
+  const recentTasks = useMemo(() => {
+    const d = data as any
+    if (!d?.recentActivityData) return []
+    
+    let activity = d.recentActivityData
+    if (searchTerm) {
+      const lowSearch = searchTerm.toLowerCase()
+      activity = activity.filter((act: any) => 
+        (act.description || '').toLowerCase().includes(lowSearch) ||
+        (act.userName || '').toLowerCase().includes(lowSearch)
+      )
+    }
+
+    return activity.slice(0, 3).map((activity: any, index: number) => ({
+      title: activity.description || `Activité ${index + 1}`,
+      time: formatTime(activity.date),
+      color: getTaskColor(index),
+    }))
+  }, [data, searchTerm])
+
+  const alerts = useMemo(() => {
+    const baseAlerts = data?.alertsData || []
+    if (!searchTerm) return baseAlerts
+    const lowSearch = searchTerm.toLowerCase()
+    return baseAlerts.filter((alert: any) => 
+      (alert.message || '').toLowerCase().includes(lowSearch) ||
+      (alert.type || '').toLowerCase().includes(lowSearch)
+    )
+  }, [data, searchTerm])
 
   // Helper functions
-  const calculateTotalCost = (phoneData: any, simCardData: any) => {
-    // Calculate based on real phone data
-    if (phoneData?.totalCost) {
-      return phoneData.totalCost
-    }
-    // Fallback calculation using average price if total cost not provided
+  function calculateTotalCost(phoneData: any, simCardData: any) {
+    if (phoneData?.totalCost) return phoneData.totalCost
     const averagePhonePrice = phoneData?.averagePrice || 25000
     const averageSimPrice = simCardData?.averagePrice || 500
     const totalPhones = phoneData?.totalPhones || 0
@@ -189,61 +238,32 @@ export default function AdminDashboard() {
     return (totalPhones * averagePhonePrice) + (totalSimCards * averageSimPrice)
   }
 
-  const generateMonthlyData = (overviewData: any) => {
-    // Use real monthly data if available, otherwise generate realistic data based on totals
-    if (overviewData.monthlyStats && Array.isArray(overviewData.monthlyStats)) {
+  function generateMonthlyData(overviewData: any) {
+    if (overviewData?.monthlyStats && Array.isArray(overviewData.monthlyStats)) {
       return overviewData.monthlyStats.map((month: any) => ({
         name: month.month || "Unknown",
         value1: month.attributions || 0,
         value2: month.returns || 0,
       }))
     }
-    
-    // Fallback: Generate realistic data based on total attributions
-    const totalAttributions = overviewData.assigned?.phones || 0
     const months = ["Jan", "Fév", "Mar", "Avr", "Mai", "Jun"]
-    return months.map((month, index) => {
-      const baseValue = Math.floor(totalAttributions / 6)
-      const variation = Math.floor(Math.random() * 20) - 10 // ±10 variation
-      return {
-        name: month,
-        value1: Math.max(0, baseValue + variation),
-        value2: Math.max(0, Math.floor((baseValue + variation) * 0.7)), // Returns are typically 70% of attributions
-      }
-    })
+    return months.map((month) => ({ name: month, value1: 0, value2: 0 }))
   }
 
-  const generateDepartmentData = (phoneData: any, userData: any, overviewData: any, simCardData: any) => {
-    // Use real department data if available
-    if (userData.departmentStats && Array.isArray(userData.departmentStats)) {
+  function generateDepartmentData(phoneData: any, userData: any, overviewData: any, simCardData: any) {
+    if (userData?.departmentStats && Array.isArray(userData.departmentStats)) {
       return userData.departmentStats.map((dept: any) => ({
         name: dept.department || "Unknown",
         value1: dept.assignedPhones || 0,
         value2: dept.totalUsers || 0,
       }))
     }
-    
-    // Fallback: Generate realistic data based on total users, phones, and SIM cards
-    const totalUsers = userData.totalUsers || overviewData.totals?.users || 0
-    const totalPhones = phoneData.totalPhones || overviewData.totals?.phones || 0
-    const totalSimCards = simCardData.totalSimCards || overviewData.totals?.simCards || 0
-    
-    const departments = ["IT", "Sales", "Marketing", "R&D", "Support", "Finance"]
-    return departments.map(dept => {
-      const userRatio = Math.random() * 0.3 + 0.1 // 10-40% of total users per dept
-      const phoneRatio = Math.random() * 0.4 + 0.1 // 10-50% of total phones per dept
-      const simRatio = Math.random() * 0.4 + 0.1 // 10-50% of total SIM cards per dept
-      return {
-        name: dept,
-        value1: Math.floor(totalPhones * phoneRatio) + Math.floor(totalSimCards * simRatio),
-        value2: Math.floor(totalUsers * userRatio),
-      }
-    })
+    return []
   }
 
-  const generateProgressData = (overviewData: any) => {
-    const assigned = overviewData.assigned?.phones || 0
-    const total = overviewData.totals?.phones || 1
+  function generateProgressData(overviewData: any) {
+    const assigned = overviewData?.assigned?.phones || 0
+    const total = overviewData?.totals?.phones || 1
     const percentage = Math.round((assigned / total) * 100)
     
     return [
@@ -252,7 +272,7 @@ export default function AdminDashboard() {
     ]
   }
 
-  const formatTime = (date: string) => {
+  function formatTime(date: string) {
     if (!date) return "Récemment"
     const now = new Date()
     const activityDate = new Date(date)
@@ -264,7 +284,7 @@ export default function AdminDashboard() {
     return activityDate.toLocaleDateString("fr-FR")
   }
 
-  const getTaskColor = (index: number) => {
+  function getTaskColor(index: number) {
     const colors = [
       "bg-gradient-to-r from-red-400 to-pink-500",
       "bg-gradient-to-r from-yellow-400 to-orange-500",
@@ -274,6 +294,7 @@ export default function AdminDashboard() {
   }
 
   const handleLogout = () => {
+    clearAuthCookies()
     localStorage.clear()
     window.location.href = "/"
   }
@@ -289,7 +310,7 @@ export default function AdminDashboard() {
     })
     setIsPhoneModalOpen(false)
     // Refresh dashboard data
-    fetchDashboardData()
+    mutate()
   }
 
   if (loading) {
@@ -311,7 +332,7 @@ export default function AdminDashboard() {
           <AlertTriangle className="h-16 w-16 text-red-500 mx-auto mb-4" />
           <h2 className="text-xl font-semibold text-gray-900 mb-2">Erreur</h2>
           <p className="text-gray-600 mb-4">{error}</p>
-          <Button onClick={fetchDashboardData} variant="outline">Réessayer</Button>
+          <Button onClick={() => mutate()} variant="outline">Réessayer</Button>
         </div>
       </div>
     )
@@ -325,45 +346,14 @@ export default function AdminDashboard() {
 
         {/* Main Content */}
         <div className="flex-1 ml-64">
-          {/* Header */}
-          <div className="bg-white/80 backdrop-blur-xl border-b border-gray-200 px-6 py-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <h1 className="text-2xl font-bold text-gray-900">Analytics - Gestion des Téléphones</h1>
-                <p className="text-gray-600">Vue d'ensemble du parc téléphonique d'entreprise</p>
-              </div>
-
-              <div className="flex items-center space-x-4">
-                <div className="relative">
-                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
-                  <Input
-                    placeholder="Rechercher..."
-                    className="pl-10 w-80 bg-white/50 border-gray-200 focus:border-blue-500"
-                  />
-                </div>
-
-                <Button variant="outline" size="sm" className="bg-white/50">
-                  <Globe className="h-4 w-4 mr-2" />
-                  FR
-                </Button>
-
-                <NotificationsDropdown userRole="admin" />
-
-                <div className="flex items-center space-x-3">
-                  <Avatar className="h-8 w-8">
-                    <AvatarImage src={userData.avatar || "/placeholder.svg"} />
-                    <AvatarFallback className="bg-gradient-to-r from-blue-500 to-purple-600 text-white">
-                      {userData.initials || "A"}
-                    </AvatarFallback>
-                  </Avatar>
-                  <div className="hidden md:block">
-                    <p className="text-sm font-medium text-gray-900">{userData.name || "Admin"}</p>
-                    <p className="text-xs text-gray-500">{userData.email || "admin@company.com"}</p>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
+          <DashboardHeader
+            title="Analytics - Gestion des Téléphones"
+            description="Vue d'ensemble du parc téléphonique d'entreprise"
+            userRole="admin"
+            searchPlaceholder="Rechercher..."
+            searchValue={searchTerm}
+            onSearch={setSearchTerm}
+          />
 
           {/* Dashboard Content */}
           <div className="p-6 space-y-6">
@@ -412,10 +402,9 @@ export default function AdminDashboard() {
                     </div>
                   </CardHeader>
                   <CardContent>
-                    <ModernChart
-                      type="line"
-                      data={chartData.monthlyAttributions}
-                      height={300}
+                    <ReactECharts
+                      option={chartData.monthlyOption}
+                      style={{ height: '300px' }}
                     />
                   </CardContent>
                 </Card>
@@ -462,10 +451,9 @@ export default function AdminDashboard() {
                     <CardTitle className="text-lg font-semibold">Répartition par Département</CardTitle>
                   </CardHeader>
                   <CardContent>
-                    <ModernChart
-                      type="bar"
-                      data={chartData.departmentStats}
-                      height={250}
+                    <ReactECharts
+                      option={chartData.departmentOption}
+                      style={{ height: '250px' }}
                     />
                   </CardContent>
                 </Card>
@@ -497,11 +485,10 @@ export default function AdminDashboard() {
                       <h3 className="text-lg font-semibold">Attribution</h3>
                       <span className="text-2xl font-bold text-purple-600">{Math.round((dashboardStats.assignedPhones / dashboardStats.totalPhones) * 100)}%</span>
                     </div>
-                    <div className="relative w-32 h-32 mx-auto mb-4">
-                      <ModernChart
-                        type="doughnut"
-                        data={chartData.progressData}
-                        height={128}
+                    <div className="relative w-48 h-48 mx-auto -mt-4">
+                      <ReactECharts
+                        option={chartData.progressOption}
+                        style={{ height: '180px' }}
                       />
                     </div>
                     <div>
@@ -521,7 +508,7 @@ export default function AdminDashboard() {
                   </CardHeader>
                   <CardContent className="space-y-3">
                     {recentTasks.length > 0 ? (
-                      recentTasks.map((task, index) => (
+                      recentTasks.map((task: any, index: number) => (
                         <TaskCard
                           key={index}
                           title={task.title}
@@ -530,8 +517,9 @@ export default function AdminDashboard() {
                         />
                       ))
                     ) : (
-                      <div className="text-center py-4 text-gray-500">
-                        <p>Aucune activité récente</p>
+                      <div className="text-center py-6 text-gray-400">
+                        <ClipboardList className="h-10 w-10 mx-auto mb-2 opacity-20" />
+                        <p className="text-sm">Aucune tâche pour aujourd'hui</p>
                       </div>
                     )}
                   </CardContent>

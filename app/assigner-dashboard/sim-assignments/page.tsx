@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { Search, Bell, Globe, User, History, ChevronLeft, ChevronRight, Download } from "lucide-react"
+import { Search, Bell, Globe, User, History, ChevronLeft, ChevronRight, Download, CreditCard, Plus, Phone } from "lucide-react"
 import { Pagination, PaginationContent, PaginationItem, PaginationLink, PaginationNext, PaginationPrevious } from "@/components/ui/pagination"
 import { Sidebar } from "@/components/sidebar"
 import { DataTable } from "@/components/data-table"
@@ -33,6 +33,7 @@ interface SimCard {
   assignedPhone?: string
   dataLimit: string
   monthlyFee: number
+  iccid: string
 }
 
 interface AssignmentHistory {
@@ -176,6 +177,7 @@ export default function SimAssignmentsPage() {
         assignedPhone: sim.assignedPhone || undefined,
         dataLimit: sim.dataLimit || "Unlimited",
         monthlyFee: sim.monthlyFee || 0,
+        iccid: sim.iccid || "",
       }))
 
       console.log("Transformed SIM cards:", transformedSimCards)
@@ -614,6 +616,7 @@ export default function SimAssignmentsPage() {
         puk: s.puk ?? "",
         notes: s.notes ?? "",
         assignedTo: s.assignedToName ?? s.assignedTo?.name ?? "",
+        assignedPhone: s.assignedPhone ?? "",
       }))
       
       // Créer un fichier Excel stylé avec ExcelJS
@@ -879,6 +882,16 @@ export default function SimAssignmentsPage() {
                       Réessayer
                     </Button>
                   </div>
+                ) : filteredSimCards.length === 0 ? (
+                  <div className="text-center py-12">
+                    <CreditCard className="h-16 w-16 text-gray-400 mx-auto mb-4" />
+                    <p className="text-gray-500 text-lg">Aucune carte SIM trouvée</p>
+                    <p className="text-gray-400 mt-2">
+                      {searchTerm || statusFilter !== "all"
+                        ? "Essayez de modifier vos critères de recherche"
+                        : "Créez votre première attribution"}
+                    </p>
+                  </div>
                 ) : (
                   <>
                     <DataTable
@@ -931,7 +944,6 @@ export default function SimAssignmentsPage() {
                         return sim[key as keyof SimCard] || "-"
                       }}
                     />
-
                   </>
                 )}
               </CardContent>

@@ -11,7 +11,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea"
 import { Badge } from "@/components/ui/badge"
 import { Search, User, Phone, CreditCard, Check } from "lucide-react"
-import { UserManagementApi, PhoneManagementApi, SIMCardManagementApi, AttributionManagementApi } from "@/api/generated";
+import { UserManagementApi } from "@/api/generated/apis/user-management-api";
+import { PhoneManagementApi } from "@/api/generated/apis/phone-management-api";
+import { SIMCardManagementApi } from "@/api/generated/apis/simcard-management-api";
+import { AttributionManagementApi } from "@/api/generated/apis/attribution-management-api";
 import { getApiConfig } from "@/lib/apiClient";
 
 interface Attribution {

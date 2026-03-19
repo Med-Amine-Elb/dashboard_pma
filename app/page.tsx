@@ -1,28 +1,23 @@
 "use client"
 
 import type React from "react"
-
 import { useState } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Badge } from "@/components/ui/badge"
 import { Phone, Eye, EyeOff, Shield, UserCheck, User } from "lucide-react"
-import { AuthenticationApi } from "@/api/generated"
+import { AuthenticationApi } from "@/api/generated/apis/authentication-api";
 import { getApiConfig } from "@/lib/apiClient"
+import { setAuthCookies } from "@/lib/authCookies"
 
-interface LoginCredentials {
-  email: string
-  password: string
-  role: "admin" | "assigner" | "user"
-}
-
-const demoAccounts: LoginCredentials[] = [
-  { email: "admin@company.com", password: "admin123", role: "admin" },
-  { email: "assigner@company.com", password: "assigner123", role: "assigner" },
-  { email: "john@company.com", password: "user123", role: "user" },
+// ─── DEV ONLY — Remove before production ────────────────────────────────────
+const devAccounts = [
+  { label: "Admin",    email: "admin@company.com",    password: "admin123",    icon: Shield,    color: "text-blue-600" },
+  { label: "Assigner", email: "assigner@company.com", password: "assigner123", icon: UserCheck, color: "text-emerald-600" },
+  { label: "User",     email: "john@company.com",     password: "user123",     icon: User,      color: "text-orange-600" },
 ]
+// ─────────────────────────────────────────────────────────────────────────────
 
 export default function LoginPage() {
   const [email, setEmail] = useState("")
@@ -31,94 +26,17 @@ export default function LoginPage() {
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState("")
 
-  const handleLogin = async (e: React.FormEvent) => {
-    e.preventDefault()
+  const performLogin = async (emailVal: string, passwordVal: string) => {
     setIsLoading(true)
     setError("")
 
     try {
       const authApi = new AuthenticationApi(getApiConfig(null))
-
-      const loginResponse = await authApi.login({
-        email: email,
-        password: password,
-      })
+      const loginResponse = await authApi.login({ email: emailVal, password: passwordVal })
 
       if (loginResponse.data.success && loginResponse.data.data) {
         const { token, user } = loginResponse.data.data
-        
-        // Store authentication data
-        localStorage.setItem("jwt_token", token || "")
-        localStorage.setItem("userRole", user?.role?.toLowerCase() || "")
-        localStorage.setItem("userEmail", user?.email || "")
-        localStorage.setItem("userId", user?.id?.toString() || "")
-        localStorage.setItem("userName", user?.name || "")
-        localStorage.setItem("userDepartment", user?.department || "")
-        localStorage.setItem("userAvatar", user?.avatar || "")
-      localStorage.setItem("isAuthenticated", "true")
 
-        // Redirect to appropriate dashboard based on role
-        const role = user?.role?.toLowerCase()
-        if (role === "admin") {
-          window.location.href = "/admin-dashboard"
-        } else if (role === "assigner") {
-          window.location.href = "/assigner-dashboard"
-        } else if (role === "user") {
-          window.location.href = "/user-dashboard"
-        } else {
-          setError("Rôle utilisateur non reconnu")
-        }
-    } else {
-        setError("Échec de l'authentification")
-      }
-    } catch (err: any) {
-      console.error("Login error:", err)
-      
-      // Handle specific error cases
-      let errorMessage = "Email ou mot de passe incorrect"
-      
-      if (err.response?.data?.message) {
-        errorMessage = err.response.data.message
-      } else if (err.response?.data?.error) {
-        errorMessage = err.response.data.error
-      } else if (err.message?.includes("Account is inactive") || err.message?.includes("désactivé")) {
-        errorMessage = "Votre compte a été désactivé. Veuillez contacter l'administrateur."
-      } else if (err.message?.includes("Invalid email or password")) {
-        errorMessage = "Email ou mot de passe incorrect"
-      } else if (err.response?.status === 400) {
-        errorMessage = "Données de connexion invalides"
-      } else if (err.response?.status === 401) {
-        errorMessage = "Email ou mot de passe incorrect"
-      } else if (err.response?.status === 403) {
-        errorMessage = "Accès refusé. Votre compte pourrait être désactivé."
-      }
-      
-      setError(errorMessage)
-    } finally {
-    setIsLoading(false)
-    }
-  }
-
-  const handleDemoLogin = async (account: LoginCredentials) => {
-    setEmail(account.email)
-    setPassword(account.password)
-    
-    // Auto-login after setting credentials
-    setIsLoading(true)
-    setError("")
-
-    try {
-      const authApi = new AuthenticationApi(getApiConfig(null))
-      
-      const loginResponse = await authApi.login({
-        email: account.email,
-        password: account.password,
-      })
-
-      if (loginResponse.data.success && loginResponse.data.data) {
-        const { token, user } = loginResponse.data.data
-        
-        // Store authentication data
         localStorage.setItem("jwt_token", token || "")
         localStorage.setItem("userRole", user?.role?.toLowerCase() || "")
         localStorage.setItem("userEmail", user?.email || "")
@@ -128,8 +46,11 @@ export default function LoginPage() {
         localStorage.setItem("userAvatar", user?.avatar || "")
         localStorage.setItem("isAuthenticated", "true")
 
-        // Redirect to appropriate dashboard based on role
-        const role = user?.role?.toLowerCase()
+        const role = user?.role?.toLowerCase() || ""
+        if (token) {
+          setAuthCookies({ token, role })
+        }
+
         if (role === "admin") {
           window.location.href = "/admin-dashboard"
         } else if (role === "assigner") {
@@ -143,31 +64,31 @@ export default function LoginPage() {
         setError("Échec de l'authentification")
       }
     } catch (err: any) {
-      console.error("Demo login error:", err)
-      
-      // Handle specific error cases
-      let errorMessage = "Échec de la connexion avec le compte de démonstration"
-      
+      let errorMessage = "Email ou mot de passe incorrect"
+
       if (err.response?.data?.message) {
         errorMessage = err.response.data.message
       } else if (err.response?.data?.error) {
         errorMessage = err.response.data.error
       } else if (err.message?.includes("Account is inactive") || err.message?.includes("désactivé")) {
-        errorMessage = "Le compte de démonstration a été désactivé. Veuillez contacter l'administrateur."
-      } else if (err.message?.includes("Invalid email or password")) {
-        errorMessage = "Email ou mot de passe incorrect pour le compte de démonstration"
+        errorMessage = "Votre compte a été désactivé. Veuillez contacter l'administrateur."
       } else if (err.response?.status === 400) {
         errorMessage = "Données de connexion invalides"
       } else if (err.response?.status === 401) {
         errorMessage = "Email ou mot de passe incorrect"
       } else if (err.response?.status === 403) {
-        errorMessage = "Accès refusé. Le compte de démonstration pourrait être désactivé."
+        errorMessage = "Accès refusé. Votre compte pourrait être désactivé."
       }
-      
+
       setError(errorMessage)
     } finally {
       setIsLoading(false)
     }
+  }
+
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault()
+    await performLogin(email, password)
   }
 
   return (
@@ -301,41 +222,29 @@ export default function LoginPage() {
                 </Button>
               </form>
 
-              {/* Demo Accounts */}
-              <div className="pt-6 border-t border-gray-200">
-                <p className="text-sm text-gray-600 text-center mb-4">Comptes de démonstration :</p>
-                <div className="space-y-2">
-                  {demoAccounts.map((account) => (
+              {/* ─── DEV ONLY — Remove before production ─── */}
+              <div className="border-t border-dashed border-amber-300 pt-4">
+                <p className="text-xs text-center text-amber-600 font-medium mb-3">
+                  🔧 Connexion rapide (dev uniquement)
+                </p>
+                <div className="grid grid-cols-3 gap-2">
+                  {devAccounts.map((acc) => (
                     <Button
-                      key={account.role}
+                      key={acc.label}
+                      type="button"
                       variant="outline"
                       size="sm"
-                      className="w-full justify-between h-10 bg-white/50 hover:bg-white/80"
-                      onClick={() => handleDemoLogin(account)}
+                      className="flex flex-col h-auto py-2 border-amber-200 hover:bg-amber-50"
+                      onClick={() => performLogin(acc.email, acc.password)}
                       disabled={isLoading}
                     >
-                      <span className="flex items-center space-x-2">
-                        {account.role === "admin" && <Shield className="h-4 w-4 text-blue-600" />}
-                        {account.role === "assigner" && <UserCheck className="h-4 w-4 text-emerald-600" />}
-                        {account.role === "user" && <User className="h-4 w-4 text-orange-600" />}
-                        <span className="capitalize">{account.role}</span>
-                      </span>
-                      <Badge
-                        variant="outline"
-                        className={
-                          account.role === "admin"
-                            ? "bg-blue-50 text-blue-700 border-blue-200"
-                            : account.role === "assigner"
-                              ? "bg-emerald-50 text-emerald-700 border-emerald-200"
-                              : "bg-orange-50 text-orange-700 border-orange-200"
-                        }
-                      >
-                        {account.email}
-                      </Badge>
+                      <acc.icon className={`h-4 w-4 mb-1 ${acc.color}`} />
+                      <span className="text-xs">{acc.label}</span>
                     </Button>
                   ))}
                 </div>
               </div>
+              {/* ─────────────────────────────────────────── */}
 
               <div className="text-center">
                 <p className="text-xs text-gray-500">

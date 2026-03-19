@@ -9,7 +9,8 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
-import { UserManagementApi, PhoneManagementApi } from "@/api/generated";
+import { UserManagementApi } from "@/api/generated/apis/user-management-api";
+import { PhoneManagementApi } from "@/api/generated/apis/phone-management-api";
 import { getApiConfig } from "@/lib/apiClient";
 
 interface SimCard {

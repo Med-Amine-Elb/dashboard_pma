@@ -6,14 +6,14 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { Search, Bell, Plus, Download, Edit, Trash2, Globe, History } from "lucide-react"
+import { Search, Bell, Plus, Download, Edit, Trash2, Globe, History, CreditCard } from "lucide-react"
 import { Pagination, PaginationContent, PaginationItem, PaginationLink, PaginationNext, PaginationPrevious } from "@/components/ui/pagination"
 import { Sidebar } from "@/components/sidebar"
 import { DataTable } from "@/components/data-table"
 import { SimCardModal } from "@/components/sim-card-modal"
 import { AssignmentHistoryModal } from "@/components/assignment-history-modal"
 import { useToast } from "@/hooks/use-toast"
-import { SIMCardManagementApi } from "@/api/generated";
+import { SIMCardManagementApi } from "@/api/generated/apis/simcard-management-api";
 import { AssignmentHistoryApi } from "@/api/generated/apis/assignment-history-api"
 import { UserManagementApi } from "@/api/generated/apis/user-management-api"
 import { getApiConfig } from "@/lib/apiClient";
@@ -841,9 +841,19 @@ export default function SimCardsPage() {
                   <div className="py-8 text-center text-gray-500">Chargement...</div>
                 ) : error ? (
                   <div className="py-8 text-center text-red-500">{error}</div>
+                ) : filteredSimCards.length === 0 ? (
+                  <div className="text-center py-12">
+                    <CreditCard className="h-16 w-16 text-gray-400 mx-auto mb-4" />
+                    <p className="text-gray-500 text-lg">Aucune carte SIM trouvée</p>
+                    <p className="text-gray-400 mt-2">
+                      {searchTerm || statusFilter !== "all" || carrierFilter !== "all"
+                        ? "Essayez de modifier vos critères de recherche"
+                        : "Créez votre première attribution"}
+                    </p>
+                  </div>
                 ) : (
-                <>
-                <DataTable
+                  <>
+                    <DataTable
                   data={filteredSimCards}
                   columns={simColumns}
                   renderCell={(sim, key) => {

@@ -28,7 +28,8 @@ import {
 } from "lucide-react"
 import { Sidebar } from "@/components/sidebar"
 import { useToast } from "@/hooks/use-toast"
-import { AuthenticationApi, UserManagementApi } from "@/api/generated";
+import { AuthenticationApi } from "@/api/generated/apis/authentication-api";
+import { UserManagementApi } from "@/api/generated/apis/user-management-api";
 import { getApiConfig } from "@/lib/apiClient";
 import { useUser } from "@/contexts/UserContext";
 

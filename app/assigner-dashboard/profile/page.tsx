@@ -14,7 +14,8 @@ import { useUser } from "@/contexts/UserContext"
 import { Toaster } from "@/components/ui/toaster"
 import { User, Mail, Phone, Calendar, Edit, Save, X, Award, TrendingUp, Users, CheckCircle, RefreshCw } from "lucide-react"
 import { useRouter } from "next/navigation"
-import { AttributionManagementApi, UserManagementApi } from "@/api/generated"
+import { AttributionManagementApi } from "@/api/generated/apis/attribution-management-api";
+import { UserManagementApi } from "@/api/generated/apis/user-management-api";
 import { getApiConfig } from "@/lib/apiClient"
 
 export default function AssignerProfilePage() {

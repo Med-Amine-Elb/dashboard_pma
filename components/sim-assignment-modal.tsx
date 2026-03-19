@@ -9,7 +9,7 @@ import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Badge } from "@/components/ui/badge"
-import { UserManagementApi } from "@/api/generated"
+import { UserManagementApi } from "@/api/generated/apis/user-management-api";
 import { getApiConfig } from "@/lib/apiClient"
 
 interface SimCard {

@@ -11,7 +11,7 @@ import { Search, Bell, Globe, Plus, CalendarIcon, Clock, User, ChevronLeft, Chev
 import { Sidebar } from "@/components/sidebar"
 import { EventModal } from "@/components/event-modal"
 import { useToast } from "@/hooks/use-toast"
-import { CalendarEventControllerApi } from "@/api/generated"
+import { CalendarEventControllerApi } from "@/api/generated/apis/calendar-event-controller-api";
 import { getApiConfig } from "@/lib/apiClient"
 import { useUser } from "@/contexts/UserContext"
 import { NotificationsDropdown } from "@/components/notifications-dropdown"

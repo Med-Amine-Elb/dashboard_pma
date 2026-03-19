@@ -1,6 +1,7 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
+import useSWR, { mutate } from "swr"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -41,335 +42,130 @@ interface PaginationInfo {
   totalPages: number
 }
 
+const fetcher = async () => {
+  const token = localStorage.getItem("jwt_token")
+  if (!token) throw new Error("Token d'authentification manquant")
+
+  const userApi = new UserManagementApi(getApiConfig(token))
+  const attributionApi = new AttributionManagementApi(getApiConfig(token))
+
+  const safeFetch = (promise: Promise<any>) => 
+    promise.catch(err => {
+      if (err?.response?.status === 401 || err?.response?.status === 403) {
+        localStorage.clear()
+        window.location.href = "/"
+      }
+      return { data: [] }
+    })
+
+  const [usersRes, attributionsRes] = await Promise.all([
+    safeFetch(userApi.getUsers(1, 1000)),
+    safeFetch(attributionApi.getAttributions(1, 1000, "ACTIVE"))
+  ])
+
+  let apiUsers: any[] = []
+  if (usersRes?.data) {
+    const uData = usersRes.data as any
+    apiUsers = uData?.success && uData?.data ? uData.data.users : uData?.users || (Array.isArray(uData) ? uData : [])
+  }
+
+  let apiAttributions: any[] = []
+  if (attributionsRes?.data) {
+    const aData = attributionsRes.data as any
+    apiAttributions = aData?.success && aData?.data ? aData.data.attributions : aData?.attributions || (Array.isArray(aData) ? aData : [])
+  }
+
+  return apiUsers.map((user: any) => {
+    const userId = parseInt(user.id)
+    const attribution = apiAttributions.find(attr => (attr.userId === userId || attr.user?.id === userId))
+    
+    return {
+      id: user.id?.toString() || "",
+      name: user.name || `${user.firstName ?? ""} ${user.lastName ?? ""}`.trim() || "",
+      email: user.email || "",
+      department: user.department || "",
+      position: user.position || "",
+      phone: user.phone || undefined,
+      status: (user.status === "ACTIVE" || user.status === "active") ? "active" : "inactive",
+      joinDate: user.joinDate || "2024-01-01",
+      avatar: user.avatar || undefined,
+      assignedPhone: attribution?.phoneModel || attribution?.phone?.model || undefined,
+      assignedSim: attribution?.simCardNumber || attribution?.simCard?.number || undefined,
+    } as AssignerUser
+  })
+}
+
 export default function AssignerUsersPage() {
   const { userData } = useUser()
-  const [user, setUser] = useState({ name: "", email: "", avatar: "" })
-  const [users, setUsers] = useState<AssignerUser[]>([])
-  const [filteredUsers, setFilteredUsers] = useState<AssignerUser[]>([])
+  const { toast } = useToast()
   const [searchTerm, setSearchTerm] = useState("")
   const [statusFilter, setStatusFilter] = useState("all")
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
   const [pagination, setPagination] = useState<PaginationInfo>({
     page: 1,
     limit: 10,
     total: 0,
     totalPages: 0,
   })
-  const { toast } = useToast()
 
+  const user = useMemo(() => ({
+    name: userData.name || "Assigner",
+    email: userData.email || "",
+    avatar: userData.avatar || "",
+  }), [userData])
+
+  const { data: users = [], error: swrError, isLoading: loading, mutate } = useSWR('assignerUsersData', fetcher, {
+    revalidateOnFocus: true,
+    refreshInterval: 60000
+  })
+
+  // Handle errors manually via an effect
   useEffect(() => {
-    // Check authentication
-    const isAuthenticated = localStorage.getItem("isAuthenticated")
-    const userRole = localStorage.getItem("userRole")
-
-    if (!isAuthenticated || userRole !== "assigner") {
-      window.location.href = "/"
-      return
-    }
-
-    // Update user data from context
-    setUser({
-      name: userData.name || "Assigner",
-      email: userData.email || "",
-      avatar: userData.avatar || "",
-    })
-
-    fetchUsers()
-  }, [userData])
-
-  useEffect(() => {
-    filterUsers()
-  }, [users, searchTerm, statusFilter])
-
-  // Refresh data when page becomes visible
-  useEffect(() => {
-    const handleVisibilityChange = () => {
-      if (!document.hidden) {
-        fetchUsers()
-      }
-    }
-
-    document.addEventListener('visibilitychange', handleVisibilityChange)
-    return () => {
-      document.removeEventListener('visibilitychange', handleVisibilityChange)
-    }
-  }, [])
-
-  const fetchUsers = async () => {
-    setLoading(true)
-    setError(null)
-    try {
-      const token = localStorage.getItem("jwt_token")
-      
-      if (!token) {
-        setError("Token d'authentification manquant")
-        return
-      }
-
-      const api = new UserManagementApi(getApiConfig(token))
-      
-      // Convert status filter to API format
-      let statusParam: "ACTIVE" | "INACTIVE" | undefined
-      if (statusFilter !== "all") {
-        // Map frontend filter values to backend API values
-        const statusMapping: { [key: string]: "ACTIVE" | "INACTIVE" } = {
-          "active": "ACTIVE",
-          "inactive": "INACTIVE"
-        }
-        statusParam = statusMapping[statusFilter]
-      }
-
-      console.log("Making API request with params:", {
-        page: pagination.page,
-        limit: pagination.limit,
-        status: statusParam,
-        search: searchTerm || undefined
-      })
-
-      const res = await api.getUsers(
-        1,
-        10000,
-        undefined, // search - we'll filter client-side
-        undefined, // department - we'll filter client-side
-        undefined, // status - we'll filter client-side
-        undefined // role
-      )
-
-      console.log("API Response:", res)
-
-      // Extract data from response
-      let apiUsers: any[] = []
-      let paginationData: any = {}
-
-      if (res.data && typeof res.data === 'object') {
-        const responseData = res.data as any
-        if (responseData.success && responseData.data) {
-          apiUsers = (responseData.data.users as any[]) || []
-          paginationData = responseData.data.pagination || {}
-        } else if (Array.isArray(responseData)) {
-          apiUsers = responseData
-        } else if (responseData.users) {
-          apiUsers = (responseData.users as any[]) || []
-          paginationData = responseData.pagination || {}
-        }
-      }
-
-             console.log("Processed users:", apiUsers)
-       console.log("Pagination data:", paginationData)
-
-       // Transform API data to match our interface and fetch assignments
-       const transformedUsers: AssignerUser[] = await Promise.all(apiUsers.map(async (user: any) => {
-         console.log("Processing user:", user.name, "Raw user data:", user)
-         
-         // Fetch active assignments for this user
-         let assignedPhone = undefined
-         let assignedSim = undefined
-         
-         try {
-           const attributionApi = new AttributionManagementApi(getApiConfig(token))
-           const attributionsRes = await attributionApi.getAttributions(
-             undefined, // page
-             undefined, // limit
-             "ACTIVE", // status
-             parseInt(user.id), // userId
-             undefined, // assignedBy
-             undefined // search
-           )
-           
-           console.log(`Attributions for user ${user.name}:`, attributionsRes.data)
-           
-           // Extract assignment data from attributions
-           if (attributionsRes.data && typeof attributionsRes.data === 'object') {
-             const responseData = attributionsRes.data as any
-             let attributions: any[] = []
-             
-             if (responseData.success && responseData.data) {
-               attributions = (responseData.data.attributions as any[]) || []
-             } else if (Array.isArray(responseData)) {
-               attributions = responseData
-             } else if (responseData.attributions) {
-               attributions = (responseData.attributions as any[]) || []
-             }
-             
-             // Find active assignments for this user
-             const userAttributions = attributions.filter((attr: any) => 
-               attr.userId === parseInt(user.id) || attr.user?.id === parseInt(user.id)
-             )
-             
-             if (userAttributions.length > 0) {
-               const activeAttribution = userAttributions[0] // Take the first active attribution
-               assignedPhone = activeAttribution.phoneModel || activeAttribution.phone?.model
-               assignedSim = activeAttribution.simCardNumber || activeAttribution.simCard?.number
-               
-               console.log(`Found assignments for ${user.name}: Phone=${assignedPhone}, SIM=${assignedSim}`)
-             }
-           }
-         } catch (error) {
-           console.error(`Error fetching assignments for user ${user.name}:`, error)
-         }
-         
-                   // Only check direct SIM card assignments if no attribution found
-          if (!assignedSim) {
-            try {
-              console.log(`Checking direct SIM assignments for user ${user.name} (ID: ${user.id})`)
-              const simCardApi = new SIMCardManagementApi(getApiConfig(token))
-                             const simCardsRes = await simCardApi.getSimCards(
-                 undefined, // page
-                 undefined, // limit
-                 "ASSIGNED", // status - only get assigned SIMs
-                 undefined, // assignedTo
-                 undefined // search
-               )
-              
-              console.log(`SIM cards response for user ${user.name}:`, simCardsRes.data)
-              
-              if (simCardsRes.data && typeof simCardsRes.data === 'object') {
-                const responseData = simCardsRes.data as any
-                let simCards: any[] = []
-                
-                                 if (responseData.success && responseData.data) {
-                   simCards = (responseData.data.simCards as any[]) || (responseData.data.simcards as any[]) || []
-                 } else if (Array.isArray(responseData)) {
-                   simCards = responseData
-                 } else if (responseData.simCards) {
-                   simCards = (responseData.simCards as any[]) || []
-                 } else if (responseData.simcards) {
-                   simCards = (responseData.simcards as any[]) || []
-                 }
-                
-                console.log(`Total SIM cards found: ${simCards.length}`)
-                
-                // Find SIM cards directly assigned to this user
-                const userSimCards = simCards.filter((sim: any) => {
-                  console.log(`Checking SIM ${sim.number} - assignedToId: ${sim.assignedToId}, user.id: ${user.id}`)
-                  return sim.assignedToId === parseInt(user.id) || sim.assignedTo?.id === parseInt(user.id)
-                })
-                
-                console.log(`SIM cards assigned to ${user.name}:`, userSimCards)
-                
-                if (userSimCards.length > 0) {
-                  const assignedSimCard = userSimCards[0] // Take the first assigned SIM
-                  assignedSim = assignedSimCard.number
-                  console.log(`Found direct SIM assignment for ${user.name}: SIM=${assignedSim}`)
-                }
-              }
-            } catch (error) {
-              console.error(`Error fetching direct SIM assignments for user ${user.name}:`, error)
-            }
-          }
-         
-         console.log(`User ${user.name} - Personal Phone: ${user.phone}, Assigned Phone: ${assignedPhone}, SIM: ${assignedSim}`)
-         
-         return {
-           id: user.id?.toString() || "",
-           name: user.name || "",
-           email: user.email || "",
-           department: user.department || "",
-           position: user.position || "",
-           phone: user.phone || undefined, // This is the user's personal phone
-           status: mapStatusToFrontend(user.status),
-           joinDate: user.joinDate || "2024-01-01",
-           avatar: user.avatar || undefined,
-           assignedPhone: assignedPhone || undefined,
-           assignedSim: assignedSim || undefined,
-         }
-       }))
-
-      setUsers(transformedUsers)
-
-      // Update pagination info
-      if (paginationData.total !== undefined) {
-        setPagination(prev => ({
-          ...prev,
-          total: paginationData.total,
-          totalPages: paginationData.totalPages || Math.ceil(paginationData.total / prev.limit),
-        }))
-      }
-
-    } catch (error: any) {
-      console.error("Error fetching users:", error)
-      
-      let errorMessage = "Erreur lors du chargement des utilisateurs"
-      if (error.response?.status === 403) {
-        errorMessage = "Accès refusé. Vérifiez vos permissions d'accès."
-      } else if (error.response?.data?.message) {
-        errorMessage = error.response.data.message
-      }
-      
-      setError(errorMessage)
+    if (swrError) {
       toast({
         title: "Erreur",
-        description: errorMessage,
+        description: "Impossible de charger les utilisateurs",
         variant: "destructive",
       })
-    } finally {
-      setLoading(false)
     }
-  }
+  }, [swrError, toast])
 
-  const filterUsers = () => {
+  const filteredUsers = useMemo(() => {
     let filtered = users
 
     if (searchTerm) {
+      const lowSearch = searchTerm.toLowerCase()
       filtered = filtered.filter(
-        (user) =>
-          user.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          user.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          user.department.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          user.position.toLowerCase().includes(searchTerm.toLowerCase()),
+        (u) =>
+          u.name.toLowerCase().includes(lowSearch) ||
+          u.email.toLowerCase().includes(lowSearch) ||
+          u.department.toLowerCase().includes(lowSearch) ||
+          u.position.toLowerCase().includes(lowSearch),
       )
     }
 
     if (statusFilter !== "all") {
-      // Map filter values to API status values
-      const statusMap: { [key: string]: string } = {
-        "active": "ACTIVE",
-        "inactive": "INACTIVE"
-      }
-      const apiStatus = statusMap[statusFilter] || statusFilter.toUpperCase()
-      filtered = filtered.filter((user) => {
-        // Convert frontend status back to API status for comparison
-        const userApiStatus = mapStatusToApi(user.status)
-        return userApiStatus === apiStatus
-      })
+      filtered = filtered.filter((u) => u.status === statusFilter)
     }
 
-    setFilteredUsers(filtered)
-    
-    // Update pagination based on filtered results
-    const totalFiltered = filtered.length
+    return filtered
+  }, [users, searchTerm, statusFilter])
+
+  // Sync pagination total when data changes
+  useEffect(() => {
     setPagination(prev => ({
       ...prev,
-      total: totalFiltered,
-      totalPages: Math.ceil(totalFiltered / prev.limit)
+      total: filteredUsers.length,
+      totalPages: Math.ceil(filteredUsers.length / prev.limit),
+      page: 1 // Reset to page 1 on search/filter
     }))
-    
-    // Reset to page 1 when filtering
-    setPagination(prev => ({ ...prev, page: 1 }))
-  }
+  }, [filteredUsers.length])
 
-  const mapStatusToApi = (frontendStatus: string): string => {
-    switch (frontendStatus) {
-      case "active":
-        return "ACTIVE"
-      case "inactive":
-        return "INACTIVE"
-      default:
-        return "ACTIVE"
-    }
-  }
+  const error = swrError?.message || null
 
-  const mapStatusToFrontend = (apiStatus: string): "active" | "inactive" => {
-    switch (apiStatus) {
-      case "ACTIVE":
-        return "active"
-      case "INACTIVE":
-        return "inactive"
-      default:
-        return "active"
-    }
-  }
+  const fetchUsers = () => mutate() // Fallback for the Refresh button
+
+
+  const [isExporting, setIsExporting] = useState(false)
 
   const handleLogout = () => {
     localStorage.clear()
@@ -396,7 +192,7 @@ export default function AssignerUsersPage() {
 
   const handleExport = async () => {
     try {
-      setLoading(true)
+      setIsExporting(true)
       
       const token = localStorage.getItem("jwt_token")
       if (!token) {
@@ -645,7 +441,7 @@ export default function AssignerUsersPage() {
         variant: "destructive",
       })
     } finally {
-      setLoading(false)
+      setIsExporting(false)
     }
   }
 
@@ -705,10 +501,7 @@ export default function AssignerUsersPage() {
                   <Avatar className="h-8 w-8">
                     <AvatarImage src={user.avatar || "/placeholder.svg"} />
                     <AvatarFallback className="bg-gradient-to-r from-emerald-500 to-green-600 text-white">
-                      {user.name
-                        .split(" ")
-                        .map((n) => n[0])
-                        .join("")}
+                      {userData.initials || "A"}
                     </AvatarFallback>
                   </Avatar>
                   <div className="hidden md:block">
@@ -738,25 +531,25 @@ export default function AssignerUsersPage() {
                        <option value="active">Actif</option>
                        <option value="inactive">Inactif</option>
                      </select>
-                     <Button 
-                       variant="outline" 
-                       onClick={handleExport} 
-                       disabled={loading}
-                       className="relative overflow-hidden group hover:bg-blue-50 transition-all duration-300"
-                     >
-                       {loading ? (
-                         <div className="flex items-center">
-                           <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600 mr-2"></div>
-                           <span>Export en cours...</span>
-                         </div>
-                       ) : (
-                         <div className="flex items-center">
-                           <Download className="h-4 w-4 mr-2 group-hover:animate-bounce transition-all duration-300" />
-                           <span>Exporter Excel</span>
-                           <div className="absolute inset-0 bg-gradient-to-r from-blue-500/0 via-blue-500/20 to-blue-500/0 transform -skew-x-12 -translate-x-full group-hover:translate-x-full transition-transform duration-1000"></div>
-                         </div>
-                       )}
-                     </Button>
+                      <Button 
+                        variant="outline" 
+                        onClick={handleExport} 
+                        disabled={isExporting || loading}
+                        className="relative overflow-hidden group hover:bg-blue-50 transition-all duration-300"
+                      >
+                        {isExporting ? (
+                          <div className="flex items-center">
+                            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600 mr-2"></div>
+                            <span>Export en cours...</span>
+                          </div>
+                        ) : (
+                          <div className="flex items-center">
+                            <Download className="h-4 w-4 mr-2 group-hover:animate-bounce transition-all duration-300" />
+                            <span>Exporter Excel</span>
+                            <div className="absolute inset-0 bg-gradient-to-r from-blue-500/0 via-blue-500/20 to-blue-500/0 transform -skew-x-12 -translate-x-full group-hover:translate-x-full transition-transform duration-1000"></div>
+                          </div>
+                        )}
+                      </Button>
                      <div className="text-sm text-gray-500 bg-blue-50 px-3 py-2 rounded-lg">
                        Mode consultation uniquement
                      </div>
@@ -781,6 +574,7 @@ export default function AssignerUsersPage() {
                     <DataTable
                       data={filteredUsers}
                       columns={userColumns}
+                      useExternalPagination={false} // Let DataTable handle local slicing of the 1000 results
                       renderCell={(user, key) => {
                         if (key === "name") {
                           return (

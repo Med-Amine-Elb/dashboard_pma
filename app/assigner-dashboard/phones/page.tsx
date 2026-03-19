@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { Search, Bell, Globe, Phone, User, Eye, ChevronLeft, ChevronRight, Download, History } from "lucide-react"
+import { Search, Bell, Globe, Phone, User, Eye, ChevronLeft, ChevronRight, Download, History, Smartphone, Plus } from "lucide-react"
 import { Pagination, PaginationContent, PaginationItem, PaginationLink, PaginationNext, PaginationPrevious } from "@/components/ui/pagination"
 import { Sidebar } from "@/components/sidebar"
 import { DataTable } from "@/components/data-table"
@@ -729,6 +729,16 @@ export default function AssignerPhonesPage() {
                     <Button onClick={fetchPhones} className="mt-4">
                       Réessayer
                     </Button>
+                  </div>
+                ) : filteredPhones.length === 0 ? (
+                  <div className="text-center py-12">
+                    <Smartphone className="h-16 w-16 text-gray-400 mx-auto mb-4" />
+                    <p className="text-gray-500 text-lg">Aucun téléphone trouvé</p>
+                    <p className="text-gray-400 mt-2">
+                      {searchTerm || statusFilter !== "all"
+                        ? "Essayez de modifier vos critères de recherche"
+                        : "Créez votre première attribution"}
+                    </p>
                   </div>
                 ) : (
                   <>

@@ -6,13 +6,14 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { Search, Bell, Plus, Download, Edit, Trash2, Globe } from "lucide-react"
+import { Search, Bell, Plus, Download, Edit, Trash2, Globe, Phone } from "lucide-react"
 import { Pagination, PaginationContent, PaginationItem, PaginationLink, PaginationNext, PaginationPrevious } from "@/components/ui/pagination"
 import { Sidebar } from "@/components/sidebar"
 import { DataTable } from "@/components/data-table"
 import { AttributionModal } from "@/components/attribution-modal"
 import { useToast } from "@/hooks/use-toast"
-import { AttributionManagementApi, AttributionDtoStatusEnum } from "@/api/generated";
+import { AttributionManagementApi } from "@/api/generated/apis/attribution-management-api";
+import { AttributionDtoStatusEnum } from "@/api/generated/models/attribution-dto";
 import { getApiConfig } from "@/lib/apiClient";
 import { useUser } from "@/contexts/UserContext";
 import { NotificationsDropdown } from "@/components/notifications-dropdown"
@@ -745,6 +746,16 @@ export default function AttributionsPage() {
                   <div className="py-8 text-center text-gray-500">Chargement...</div>
                 ) : error ? (
                   <div className="py-8 text-center text-red-500">{error}</div>
+                ) : filteredAttributions.length === 0 ? (
+                  <div className="text-center py-12">
+                    <Phone className="h-16 w-16 text-gray-400 mx-auto mb-4" />
+                    <p className="text-gray-500 text-lg">Aucune attribution trouvée</p>
+                    <p className="text-gray-400 mt-2">
+                      {searchTerm || statusFilter !== "all"
+                        ? "Essayez de modifier vos critères de recherche"
+                        : "Créez votre première attribution"}
+                    </p>
+                  </div>
                 ) : (
                 <>
                 <DataTable

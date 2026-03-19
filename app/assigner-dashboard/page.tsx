@@ -1,6 +1,7 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
+import useSWR, { mutate } from "swr"
 import { Sidebar } from "@/components/sidebar"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -36,9 +37,11 @@ import {
   Phone,
   Smartphone,
   Activity,
+  Plus,
   RefreshCw,
   Globe,
   Bell,
+  History,
 } from "lucide-react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
@@ -46,7 +49,9 @@ import dynamic from "next/dynamic"
 import { AttributionManagementApi, UserManagementApi, PhoneManagementApi, SIMCardManagementApi } from "@/api/generated"
 import { getApiConfig } from "@/lib/apiClient"
 import { useUser } from "@/contexts/UserContext"
+import { clearAuthCookies } from "@/lib/authCookies"
 import { NotificationsDropdown } from "@/components/notifications-dropdown"
+import { DashboardHeader } from "@/components/dashboard-header"
 
 // Dynamically import ECharts components to avoid SSR issues
 const ReactECharts = dynamic(() => import("echarts-for-react"), { ssr: false })
@@ -72,6 +77,59 @@ interface DashboardStats {
   }>
 }
 
+
+const fetcher = async () => {
+  const token = localStorage.getItem("jwt_token")
+  if (!token) throw new Error("Token d'authentification manquant")
+
+  const attributionApi = new AttributionManagementApi(getApiConfig(token))
+  const userApi = new UserManagementApi(getApiConfig(token))
+  const phoneApi = new PhoneManagementApi(getApiConfig(token))
+  const simApi = new SIMCardManagementApi(getApiConfig(token))
+
+  const safeFetch = (promise: Promise<any>) => 
+    promise.catch(err => {
+      if (err?.response?.status === 401 || err?.response?.status === 403) {
+        clearAuthCookies();
+        localStorage.removeItem("jwt_token");
+        localStorage.removeItem("userRole");
+        window.location.href = "/";
+      }
+      return { data: [] };
+    });
+
+  const [attributionsRes, usersRes, phonesRes, simsRes] = await Promise.all([
+    safeFetch(attributionApi.getAttributions(1, 1000, undefined, undefined, undefined, undefined)),
+    safeFetch(userApi.getUsers(1, 1000, undefined, undefined, undefined, undefined)),
+    safeFetch(phoneApi.getPhones(1, 1000)),
+    safeFetch(simApi.getSimCards(1, 1000))
+  ])
+
+  let attributions = []
+  let users = []
+  let phones = []
+  let sims = []
+
+  if (attributionsRes.data && typeof attributionsRes.data === 'object') {
+    const attrData = attributionsRes.data
+    attributions = attrData.success && attrData.data ? attrData.data.attributions : attrData.attributions || Array.isArray(attrData) ? attrData : []
+  }
+  if (usersRes.data && typeof usersRes.data === 'object') {
+    const userData = usersRes.data
+    users = userData.success && userData.data ? userData.data.users : userData.users || Array.isArray(userData) ? userData : []
+  }
+  if (phonesRes.data && typeof phonesRes.data === 'object') {
+    const phoneData = phonesRes.data
+    phones = phoneData.success && phoneData.data ? phoneData.data.phones : phoneData.phones || Array.isArray(phoneData) ? phoneData : []
+  }
+  if (simsRes.data && typeof simsRes.data === 'object') {
+    const simData = simsRes.data
+    sims = simData.success && simData.data ? simData.data.simcards || simData.data.simCards : simData.simcards || simData.simCards || Array.isArray(simData) ? simData : []
+  }
+
+  return { attributions, users, phones, sims }
+}
+
 export default function AssignerDashboard() {
   const { userData } = useUser()
   const [showAttributionModal, setShowAttributionModal] = useState(false)
@@ -79,185 +137,101 @@ export default function AssignerDashboard() {
   const [showInviteModal, setShowInviteModal] = useState(false)
   const [isEditing, setIsEditing] = useState(false)
   const [inviteEmail, setInviteEmail] = useState("")
-  const [stats, setStats] = useState<DashboardStats>({
-    activeAttributions: 0,
-    pendingAttributions: 0,
-    totalUsers: 0,
-    satisfactionRate: 0,
-    totalPhones: 0,
-    totalSims: 0,
-    assignedPhones: 0,
-    assignedSims: 0,
-    monthlyAttributions: [0, 0, 0, 0, 0, 0],
-    monthlyReturns: [0, 0, 0, 0, 0, 0],
-    deviceDistribution: [],
-    recentActivity: []
-  })
-  const [loading, setLoading] = useState(true)
+  const [searchTerm, setSearchTerm] = useState("")
+  
   const { toast } = useToast()
   const router = useRouter()
 
+  const { data, error: swrError, isLoading, mutate } = useSWR('assignerDashboardData', fetcher, {
+    revalidateOnFocus: true,
+    refreshInterval: 60000
+  })
+
+  // Handle errors manually via an effect
   useEffect(() => {
-    // Check authentication
-    const userRole = localStorage.getItem("userRole")
-    if (userRole !== "assigner") {
-      router.push("/")
-      return
-    }
-    fetchDashboardData()
-  }, [userData, router])
-
-  const fetchDashboardData = async () => {
-    setLoading(true)
-    try {
-      const token = localStorage.getItem("jwt_token")
-      if (!token) {
-        toast({
-          title: "Erreur",
-          description: "Token d'authentification manquant",
-          variant: "destructive",
-        })
-        return
-      }
-
-      const attributionApi = new AttributionManagementApi(getApiConfig(token))
-      const userApi = new UserManagementApi(getApiConfig(token))
-      const phoneApi = new PhoneManagementApi(getApiConfig(token))
-      const simApi = new SIMCardManagementApi(getApiConfig(token))
-
-      // Fetch all data in parallel
-      const [attributionsRes, usersRes, phonesRes, simsRes] = await Promise.all([
-        attributionApi.getAttributions(1, 1000, undefined, undefined, undefined, undefined),
-        userApi.getUsers(1, 1000, undefined, undefined, undefined, undefined),
-        phoneApi.getPhones(1, 1000),
-        simApi.getSimCards(1, 1000)
-      ])
-
-      // Extract data from responses
-      let attributions: any[] = []
-      let users: any[] = []
-      let phones: any[] = []
-      let sims: any[] = []
-
-      // Parse attributions
-      if (attributionsRes.data && typeof attributionsRes.data === 'object') {
-        const attrData = attributionsRes.data as any
-        if (attrData.success && attrData.data) {
-          attributions = (attrData.data.attributions as any[]) || []
-        } else if (attrData.attributions) {
-          attributions = (attrData.attributions as any[]) || []
-        } else if (Array.isArray(attrData)) {
-          attributions = attrData
-        }
-      }
-
-      // Parse users
-      if (usersRes.data && typeof usersRes.data === 'object') {
-        const userData = usersRes.data as any
-        if (userData.success && userData.data) {
-          users = (userData.data.users as any[]) || []
-        } else if (userData.users) {
-          users = (userData.users as any[]) || []
-        } else if (Array.isArray(userData)) {
-          users = userData
-        }
-      }
-
-      // Parse phones
-      if (phonesRes.data && typeof phonesRes.data === 'object') {
-        const phoneData = phonesRes.data as any
-        if (phoneData.success && phoneData.data) {
-          phones = (phoneData.data.phones as any[]) || []
-        } else if (phoneData.phones) {
-          phones = (phoneData.phones as any[]) || []
-        } else if (Array.isArray(phoneData)) {
-          phones = phoneData
-        }
-      }
-
-      // Parse SIMs
-      if (simsRes.data && typeof simsRes.data === 'object') {
-        const simData = simsRes.data as any
-        if (simData.success && simData.data) {
-          sims = (simData.data.simcards as any[]) || (simData.data.simCards as any[]) || []
-        } else if (simData.simcards) {
-          sims = (simData.simcards as any[]) || []
-        } else if (simData.simCards) {
-          sims = (simData.simCards as any[]) || []
-        } else if (Array.isArray(simData)) {
-          sims = simData
-        }
-      }
-
-      // Calculate statistics
-      const activeAttributions = attributions.filter(attr => attr.status === "ACTIVE").length
-      const pendingAttributions = attributions.filter(attr => attr.status === "PENDING").length
-      const totalUsers = users.length
-      const totalPhones = phones.length
-      const totalSims = sims.length
-      const assignedPhones = phones.filter(phone => phone.status === "ASSIGNED" || phone.assignedToId).length
-      const assignedSims = sims.filter(sim => sim.status === "ASSIGNED" || sim.assignedToId).length
-
-      // Calculate satisfaction rate (based on active vs returned attributions)
-      const returnedAttributions = attributions.filter(attr => attr.status === "RETURNED").length
-      const totalAttributions = activeAttributions + returnedAttributions
-      const satisfactionRate = totalAttributions > 0 ? Math.round((activeAttributions / totalAttributions) * 100) : 100
-
-      // Calculate device distribution
-      const deviceCounts: { [key: string]: number } = {}
-      phones.forEach(phone => {
-        const brand = phone.brand || 'Autres'
-        deviceCounts[brand] = (deviceCounts[brand] || 0) + 1
-      })
-      const deviceDistribution = Object.entries(deviceCounts).map(([name, value]) => ({ name, value }))
-
-      // Generate recent activity from attributions
-      const recentActivity = attributions
-        .sort((a, b) => new Date(b.assignmentDate).getTime() - new Date(a.assignmentDate).getTime())
-        .slice(0, 4)
-        .map(attr => ({
-          user: attr.userName || 'Utilisateur inconnu',
-          action: attr.status === "ACTIVE" ? "Attribution créée" : 
-                  attr.status === "RETURNED" ? "Attribution retournée" : "Demande traitée",
-          item: attr.phoneModel || attr.simCardNumber || 'Élément inconnu',
-          time: new Date(attr.assignmentDate).toLocaleDateString("fr-FR"),
-          avatar: (attr.userName || '').split(' ').map((n: string) => n[0]).join('').toUpperCase()
-        }))
-
-      // Generate monthly data (simplified - you can enhance this with real date filtering)
-      const monthlyAttributions = [activeAttributions, Math.floor(activeAttributions * 0.8), Math.floor(activeAttributions * 0.9), 
-                                  Math.floor(activeAttributions * 0.7), Math.floor(activeAttributions * 0.6), Math.floor(activeAttributions * 0.5)]
-      const monthlyReturns = [returnedAttributions, Math.floor(returnedAttributions * 0.8), Math.floor(returnedAttributions * 0.9),
-                             Math.floor(returnedAttributions * 0.7), Math.floor(returnedAttributions * 0.6), Math.floor(returnedAttributions * 0.5)]
-
-      setStats({
-        activeAttributions,
-        pendingAttributions,
-        totalUsers,
-        satisfactionRate,
-        totalPhones,
-        totalSims,
-        assignedPhones,
-        assignedSims,
-        monthlyAttributions,
-        monthlyReturns,
-        deviceDistribution,
-        recentActivity
-      })
-
-    } catch (error) {
-      console.error("Error fetching dashboard data:", error)
+    if (swrError) {
       toast({
         title: "Erreur",
         description: "Impossible de charger les données du dashboard",
         variant: "destructive",
       })
-    } finally {
-      setLoading(false)
     }
-  }
+  }, [swrError, toast])
+
+  const stats = useMemo(() => {
+    if (!data) return {
+      activeAttributions: 0,
+      pendingAttributions: 0,
+      totalUsers: 0,
+      satisfactionRate: 100,
+      totalPhones: 0,
+      totalSims: 0,
+      assignedPhones: 0,
+      assignedSims: 0,
+      monthlyAttributions: [0, 0, 0, 0, 0, 0],
+      monthlyReturns: [0, 0, 0, 0, 0, 0],
+      deviceDistribution: [],
+      recentActivity: []
+    }
+
+    const { attributions, users, phones, sims } = data
+
+    const activeAttributions = attributions.filter((attr: any) => attr.status === "ACTIVE").length
+    const pendingAttributions = attributions.filter((attr: any) => attr.status === "PENDING").length
+    const totalUsers = users.length
+    const totalPhones = phones.length
+    const totalSims = sims.length
+    const assignedPhones = phones.filter((phone: any) => phone.status === "ASSIGNED" || phone.assignedToId).length
+    const assignedSims = sims.filter((sim: any) => sim.status === "ASSIGNED" || sim.assignedToId).length
+
+    const returnedAttributions = attributions.filter((attr: any) => attr.status === "RETURNED").length
+    const totalAttributions = activeAttributions + returnedAttributions
+    const satisfactionRate = totalAttributions > 0 ? Math.round((activeAttributions / totalAttributions) * 100) : 100
+
+    const deviceCounts: Record<string, number> = {}
+    phones.forEach((phone: any) => {
+      const brand = phone.brand || 'Autres'
+      deviceCounts[brand] = (deviceCounts[brand] || 0) + 1
+    })
+    const deviceDistribution = Object.entries(deviceCounts).map(([name, value]) => ({ name, value }))
+
+    const recentActivity = [...attributions]
+      .sort((a, b) => new Date(b.assignmentDate).getTime() - new Date(a.assignmentDate).getTime())
+      .filter((attr: any) => {
+        if (!searchTerm) return true
+        const lowSearch = searchTerm.toLowerCase()
+        return (attr.userName || '').toLowerCase().includes(lowSearch) ||
+               (attr.phoneModel || '').toLowerCase().includes(lowSearch) ||
+               (attr.simCardNumber || '').toLowerCase().includes(lowSearch)
+      })
+      .slice(0, 4)
+      .map((attr: any) => ({
+        user: attr.userName || 'Utilisateur inconnu',
+        action: attr.status === "ACTIVE" ? "Attribution créée" : 
+                attr.status === "RETURNED" ? "Attribution retournée" : "Demande traitée",
+        item: attr.phoneModel || attr.simCardNumber || 'Élément inconnu',
+        time: new Date(attr.assignmentDate).toLocaleDateString("fr-FR"),
+        avatar: (attr.userName || '').split(' ').map((n: string) => n[0]).join('').toUpperCase()
+      }))
+
+    return {
+      activeAttributions,
+      pendingAttributions,
+      totalUsers,
+      satisfactionRate,
+      totalPhones,
+      totalSims,
+      assignedPhones,
+      assignedSims,
+      monthlyAttributions: [0, 0, 0, 0, 0, 0],
+      monthlyReturns: [0, 0, 0, 0, 0, 0],
+      deviceDistribution,
+      recentActivity
+    }
+  }, [data, searchTerm])
 
   const handleLogout = () => {
+    clearAuthCookies()
     localStorage.removeItem("userRole")
     router.push("/")
   }
@@ -490,139 +464,92 @@ export default function AssignerDashboard() {
     <div className="flex min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100">
       <Sidebar activeItem="board" onLogout={handleLogout} />
 
-             <div className="flex-1 ml-64">
-         {/* Header Bar */}
-         <div className="bg-white/80 backdrop-blur-xl border-b border-gray-200 px-6 py-4">
-           <div className="flex items-center justify-between">
-             <div>
-               <h1 className="text-2xl font-bold text-gray-900">Dashboard Assignateur</h1>
-               <p className="text-gray-600">Gérez vos attributions et suivez les performances</p>
-             </div>
+             {/* Main Content */}
+        <div className="flex-1 ml-64 p-0">
+          <DashboardHeader 
+            title={`Bienvenue, ${userData?.firstName || 'Utilisateur'}`}
+            description="Tableau de bord de gestion des attributions"
+            userRole="assigner"
+            searchPlaceholder="Rechercher une attribution..."
+            searchValue={searchTerm}
+            onSearch={setSearchTerm}
+          />
 
-             <div className="flex items-center space-x-4">
-               <div className="relative">
-                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
-                 <Input
-                   placeholder="Rechercher..."
-                   className="pl-10 w-80 bg-white/50 border-gray-200 focus:border-blue-500"
-                 />
-               </div>
-
-               <Button variant="outline" size="sm" className="bg-white/50">
-                 <Globe className="h-4 w-4 mr-2" />
-                 FR
-               </Button>
-
-               <NotificationsDropdown userRole="assigner" />
-
-               <div className="flex items-center space-x-3">
-                 <Avatar className="h-8 w-8">
-                   <AvatarImage src={userData.avatar || "/placeholder.svg"} />
-                   <AvatarFallback className="bg-gradient-to-r from-blue-500 to-purple-600 text-white">
-                     {userData.name
-                       .split(" ")
-                       .map((n) => n[0])
-                       .join("")}
-                   </AvatarFallback>
-                 </Avatar>
-                 <div className="hidden md:block">
-                   <p className="text-sm font-medium text-gray-900">{userData.name || "Assigner"}</p>
-                   <p className="text-xs text-gray-500">{userData.email || "assigner@company.com"}</p>
-                 </div>
-               </div>
-             </div>
-           </div>
-         </div>
-
-         <div className="p-8">
-           {/* Dashboard Content Header */}
-           <div className="flex items-center justify-between mb-8">
-            <div>
-              <h1 className="text-3xl font-bold text-gray-900">Dashboard Assignateur</h1>
-              <p className="text-gray-600 mt-2">Gérez vos attributions et suivez les performances</p>
-            </div>
-            <div className="flex items-center space-x-4">
-              <Button 
-                variant="outline" 
-                size="sm" 
-                onClick={fetchDashboardData}
-                disabled={loading}
-                className="flex items-center space-x-2"
-              >
-                <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
-                <span>Actualiser</span>
-              </Button>
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
-                <Input placeholder="Rechercher..." className="pl-10 w-64" />
+          <div className="p-8">
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-8">
+              <div>
+                <h1 className="text-3xl font-bold tracking-tight text-slate-900 mb-2">Gestion des Équipements</h1>
+                <p className="text-slate-500">Supervisez et gérez les attributions de téléphones et cartes SIM.</p>
               </div>
-              <Button variant="outline" size="sm">
-                <Filter className="h-4 w-4 mr-2" />
-                Filtres
-              </Button>
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button variant="outline" size="sm">
-                    <MoreHorizontal className="h-4 w-4" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                  <DropdownMenuItem onClick={handleProjectDetails}>
-                    <Eye className="h-4 w-4 mr-2" />
-                    Détails du projet
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={handleEditProject}>
-                    <Edit className="h-4 w-4 mr-2" />
-                    {isEditing ? "Sauvegarder" : "Modifier"}
-                  </DropdownMenuItem>
-                  <Dialog open={showInviteModal} onOpenChange={setShowInviteModal}>
-                    <DialogTrigger asChild>
-                      <DropdownMenuItem onSelect={(e) => e.preventDefault()}>
-                        <UserPlus className="h-4 w-4 mr-2" />
-                        Inviter
-                      </DropdownMenuItem>
-                    </DialogTrigger>
-                    <DialogContent>
-                      <DialogHeader>
-                        <DialogTitle>Inviter un utilisateur</DialogTitle>
-                        <DialogDescription>
-                          Envoyez une invitation à un nouvel utilisateur pour rejoindre l'équipe.
-                        </DialogDescription>
-                      </DialogHeader>
-                      <div className="space-y-4">
-                        <div>
-                          <label htmlFor="email" className="block text-sm font-medium mb-2">
-                            Adresse email
-                          </label>
-                          <Input
-                            id="email"
-                            type="email"
-                            placeholder="utilisateur@exemple.com"
-                            value={inviteEmail}
-                            onChange={(e) => setInviteEmail(e.target.value)}
-                          />
+              <div className="flex items-center space-x-3">
+                <Button onClick={() => setShowAttributionModal(true)} className="bg-indigo-600 hover:bg-indigo-700 text-white shadow-lg shadow-indigo-200 transition-all active:scale-95">
+                  <Plus className="h-4 w-4 mr-2" />
+                  Nouvelle Attribution
+                </Button>
+                
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="outline" className="border-slate-200 hover:bg-slate-50">
+                      <MoreHorizontal className="h-4 w-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-56">
+                    <DropdownMenuItem onClick={handleProjectDetails}>
+                      <Eye className="h-4 w-4 mr-2" />
+                      Détails du projet
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={handleEditProject}>
+                      <Edit className="h-4 w-4 mr-2" />
+                      {isEditing ? "Désactiver l'édition" : "Activer l'édition"}
+                    </DropdownMenuItem>
+                    <Dialog open={showInviteModal} onOpenChange={setShowInviteModal}>
+                      <DialogTrigger asChild>
+                        <DropdownMenuItem onSelect={(e) => e.preventDefault()}>
+                          <UserPlus className="h-4 w-4 mr-2" />
+                          Inviter un utilisateur
+                        </DropdownMenuItem>
+                      </DialogTrigger>
+                      <DialogContent>
+                        <DialogHeader>
+                          <DialogTitle>Inviter un utilisateur</DialogTitle>
+                          <DialogDescription>
+                            Envoyez une invitation à un nouvel utilisateur pour rejoindre l'équipe.
+                          </DialogDescription>
+                        </DialogHeader>
+                        <div className="space-y-4">
+                          <div>
+                            <label htmlFor="email" className="block text-sm font-medium mb-2">
+                              Adresse email
+                            </label>
+                            <Input
+                              id="email"
+                              type="email"
+                              placeholder="utilisateur@exemple.com"
+                              value={inviteEmail}
+                              onChange={(e) => setInviteEmail(e.target.value)}
+                            />
+                          </div>
+                          <div className="flex justify-end space-x-2">
+                            <Button variant="outline" onClick={() => setShowInviteModal(false)}>
+                              Annuler
+                            </Button>
+                            <Button onClick={handleInviteUser}>Envoyer l'invitation</Button>
+                          </div>
                         </div>
-                        <div className="flex justify-end space-x-2">
-                          <Button variant="outline" onClick={() => setShowInviteModal(false)}>
-                            Annuler
-                          </Button>
-                          <Button onClick={handleInviteUser}>Envoyer l'invitation</Button>
-                        </div>
-                      </div>
-                    </DialogContent>
-                  </Dialog>
-                  <DropdownMenuItem>
-                    <Settings className="h-4 w-4 mr-2" />
-                    Paramètres
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
+                      </DialogContent>
+                    </Dialog>
+                    <DropdownMenuItem>
+                      <Settings className="h-4 w-4 mr-2" />
+                      Paramètres
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
             </div>
-          </div>
 
           {/* Stats Cards */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-6 mb-8">
-            {loading ? (
+            {isLoading ? (
               // Loading skeleton
               Array.from({ length: 6 }).map((_, index) => (
                 <Card key={index} className="hover:shadow-lg transition-shadow bg-white/80 backdrop-blur-sm">
@@ -725,7 +652,7 @@ export default function AssignerDashboard() {
               </CardHeader>
               <CardContent>
                 <div className="space-y-4">
-                  {loading ? (
+                  {isLoading ? (
                     // Loading skeleton for activities
                     Array.from({ length: 4 }).map((_, index) => (
                       <div key={index} className="flex items-center space-x-3 p-3 rounded-lg">
@@ -758,8 +685,9 @@ export default function AssignerDashboard() {
                       </div>
                     ))
                   ) : (
-                    <div className="text-center py-8">
-                      <p className="text-gray-500">Aucune activité récente</p>
+                    <div className="text-center py-8 text-gray-400">
+                      <History className="h-10 w-10 mx-auto mb-2 opacity-20" />
+                      <p className="text-sm">Aucune activité récente</p>
                     </div>
                   )}
                 </div>
@@ -777,7 +705,7 @@ export default function AssignerDashboard() {
                   <CardDescription>Gérez vos tâches d'attribution</CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <KanbanBoard />
+                  <KanbanBoard searchTerm={searchTerm} />
                 </CardContent>
               </Card>
             </div>
@@ -792,7 +720,7 @@ export default function AssignerDashboard() {
         onSave={(data) => {
           console.log("Attribution saved:", data)
           setShowAttributionModal(false)
-          fetchDashboardData() // Refresh data after save
+          mutate() // Refresh data after save
         }}
         attribution={null}
       />

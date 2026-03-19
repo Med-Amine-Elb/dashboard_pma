@@ -1,14 +1,15 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  eslint: {
-    ignoreDuringBuilds: true,
-  },
-  typescript: {
-    ignoreBuildErrors: true,
-  },
-  images: {
-    unoptimized: true,
+  experimental: {
+    optimizePackageImports: [
+      'lucide-react', 
+      'recharts', 
+      'date-fns', 
+      '@radix-ui/react-icons', 
+      'echarts-for-react',
+      'exceljs'
+    ],
   },
 }
 
-export default nextConfig
+export default nextConfig;
