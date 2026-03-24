@@ -149,6 +149,7 @@ export default function AttributionsPage() {
           console.log("Phones API success. Raw data:", phonesRes.value.data);
           phonesList = (phonesRes.value.data as any).phones || 
                        (phonesRes.value.data as any).data?.phones || 
+                       (phonesRes.value.data as any).content ||
                        (Array.isArray(phonesRes.value.data) ? phonesRes.value.data : []);
           console.log("Extracted phones count:", phonesList.length);
           setAllPhones(phonesList);
@@ -158,6 +159,7 @@ export default function AttributionsPage() {
           console.log("Users API success. Raw data:", usersRes.value.data);
           usersList = (usersRes.value.data as any).users || 
                       (usersRes.value.data as any).data?.users || 
+                      (usersRes.value.data as any).content ||
                       (Array.isArray(usersRes.value.data) ? usersRes.value.data : []);
           console.log("Extracted users count:", usersList.length);
           setAllUsers(usersList);
@@ -205,13 +207,13 @@ export default function AttributionsPage() {
           userName: a.userName || beneficiary?.name || "",
           userEmail: a.userEmail || beneficiary?.email || "",
           userPhone: a.userPhone || beneficiary?.phone || undefined,
-          userFunction: a.userFunction || beneficiary?.position || "Agent Administratif",
-          hierarchicalManager: a.hierarchicalManager || beneficiary?.manager || "Yassine ELHADI",
-          hierarchicalManagerFunction: a.hierarchicalManagerFunction || manager?.position || "Chef Département Moyens Généraux",
+          userFunction: a.userFunction || beneficiary?.position || "N/A",
+          hierarchicalManager: a.hierarchicalManager || beneficiary?.manager || "N/A",
+          hierarchicalManagerFunction: a.hierarchicalManagerFunction || manager?.position || "N/A",
           phoneId: a.phoneId ? String(a.phoneId) : undefined,
-          phoneModel: a.phoneModel || phone?.model || "____________________",
+          phoneModel: a.phoneModel || phone?.model || "N/A",
           phoneBrand: a.phoneBrand || phone?.brand || undefined,
-          phoneImei: a.phoneImei || phone?.imei || "____________________",
+          phoneImei: a.phoneImei || phone?.imei || "N/A",
           simCardId: a.simCardId ? String(a.simCardId) : undefined,
           simCardNumber: a.simCardNumber || undefined,
           assignedBy: a.assignedByName || "",
@@ -803,9 +805,10 @@ export default function AttributionsPage() {
                           if (token) {
                             const phoneApi = new PhoneManagementApi(getApiConfig(token));
                             const phoneRes = await phoneApi.getPhoneById(Number(lastCreatedAttribution.phoneId));
-                            if (phoneRes.data) {
-                              imei = (phoneRes.data as any).imei;
-                              brand = (phoneRes.data as any).brand;
+                            const pObj = (phoneRes.data as any)?.phone || (phoneRes.data as any)?.data?.phone || (phoneRes.data as any)?.data || phoneRes.data;
+                            if (pObj) {
+                              imei = pObj.imei;
+                              brand = pObj.brand;
                             }
                           }
                         } catch (e) {
@@ -917,15 +920,16 @@ export default function AttributionsPage() {
                               let imei = attr.phoneImei;
                               let brand = attr.phoneBrand;
                               
-                              if ((!imei || !brand) && attr.phoneId) {
+                              if ((!imei || imei === "N/A" || !brand || brand === "N/A") && attr.phoneId) {
                                 try {
                                   const token = localStorage.getItem("jwt_token");
                                   if (token) {
                                     const phoneApi = new PhoneManagementApi(getApiConfig(token));
                                     const phoneRes = await phoneApi.getPhoneById(Number(attr.phoneId));
-                                    if (phoneRes.data) {
-                                      imei = (phoneRes.data as any).imei;
-                                      brand = (phoneRes.data as any).brand;
+                                    const pObj = (phoneRes.data as any)?.phone || (phoneRes.data as any)?.data?.phone || (phoneRes.data as any)?.data || phoneRes.data;
+                                    if (pObj) {
+                                      imei = pObj.imei;
+                                      brand = pObj.brand;
                                     }
                                   }
                                 } catch (err) {

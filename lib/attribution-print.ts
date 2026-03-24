@@ -40,7 +40,7 @@ export function printAttributionForm(data: AttributionPrintData): void {
     <table class="header-table">
       <tr>
         <td class="logo-box">
-          <img src="/gbm-logo.png" alt="GBM" style="max-height: 35pt;" onerror="this.outerHTML='<div style=\"font-size: 20pt; font-weight: bold; color: #0056b3;\">GBM</div>'"/>
+          <img src="/gbm-logo.png" alt="GBM" style="max-height: 35pt; object-fit: contain;" />
         </td>
         <td class="title-box">
           <h1>Fiche d'attribution d'actif</h1>
@@ -60,8 +60,8 @@ export function printAttributionForm(data: AttributionPrintData): void {
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body { font-family: Arial, sans-serif; font-size: 9pt; color: #333; line-height: 1.2; }
-    @page { size: A4; margin: 10mm; }
-    .page { width: 100%; min-height: 277mm; position: relative; page-break-after: always; padding-bottom: 20pt; }
+    @page { size: A4; margin: 0; }
+    .page { width: 100%; height: 296mm; max-height: 296mm; overflow: hidden; position: relative; page-break-after: always; padding: 12mm 15mm; box-sizing: border-box; }
     .page:last-child { page-break-after: avoid; }
     
     .header-table { width: 100%; border-collapse: collapse; border: 1.5px solid #000; margin-bottom: 5pt; }
@@ -75,10 +75,10 @@ export function printAttributionForm(data: AttributionPrintData): void {
     .blue-banner { background-color: #0056b3; color: white; text-align: center; font-weight: bold; padding: 4pt; font-size: 10pt; border: 1.5px solid #000; border-bottom: none; }
     
     .form-table { width: 100%; border-collapse: collapse; margin-bottom: 5pt; }
-    .form-table td { border: 1.5px solid #000; padding: 4pt 6pt; vertical-align: top; }
-    .label-cell { background-color: #f2f2f2; font-weight: bold; width: 130pt; font-size: 8.5pt; }
-    .value-cell { background-color: #fff; font-size: 9pt; }
-    .label-inner { font-weight: bold; font-size: 8pt; margin-bottom: 1pt; }
+    .form-table td { border: 1.5px solid #000; padding: 4pt 6pt; vertical-align: middle; text-align: left; }
+    .label-cell { background-color: #f2f2f2; font-weight: bold; width: 130pt; font-size: 8.5pt; text-align: left; }
+    .value-cell { background-color: #fff; font-size: 9pt; text-align: center; }
+    .label-inner { font-weight: bold; font-size: 8pt; margin-bottom: 2pt; text-align: left; }
     
     .checkbox { width: 10pt; height: 10pt; border: 1.2px solid #000; display: inline-block; margin-right: 5pt; vertical-align: middle; position: relative; }
     .checkbox.checked::after { content: 'X'; position: absolute; top: -1pt; left: 1pt; font-size: 8pt; font-weight: bold; }
@@ -95,9 +95,28 @@ export function printAttributionForm(data: AttributionPrintData): void {
     .sig-line { font-weight: bold; margin-bottom: 5pt; }
     .sig-label { font-size: 8pt; font-style: italic; color: #666; }
     .sig-space { height: 60pt; }
+
+    #loading-overlay {
+      position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+      background: rgba(255, 255, 255, 0.95); z-index: 9999;
+      display: flex; flex-direction: column; justify-content: center; align-items: center;
+    }
+    .spinner {
+      border: 4px solid #f3f3f3; border-top: 4px solid #0056b3; border-radius: 50%;
+      width: 40px; height: 40px; animation: spin 1s linear infinite; margin-bottom: 15pt;
+    }
+    @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    @media print {
+      #loading-overlay { display: none !important; }
+    }
   </style>
 </head>
 <body>
+  <div id="loading-overlay">
+    <div class="spinner"></div>
+    <h2 style="color: #0056b3; font-family: sans-serif;">Génération du PDF en cours...</h2>
+  </div>
+  <div id="print-content">
   <!-- PAGE 1: RECTO -->
   <div class="page">
     ${headerHtml}
@@ -106,35 +125,35 @@ export function printAttributionForm(data: AttributionPrintData): void {
     <table class="form-table">
       <tr>
         <td class="label-cell">Nom et Prénom du<br/>Bénéficiaire de l'actif</td>
-        <td class="value-cell" style="width: 150pt; font-weight: bold;">${escapeHtml(data.userName || "")}</td>
-        <td style="width: 140pt;">
+        <td class="value-cell" style="width: 150pt; font-weight: bold; text-align: center;">${escapeHtml(data.userName || "N/A")}</td>
+        <td style="width: 140pt; text-align: center;">
           <div class="label-inner">Fonction :</div>
-          ${escapeHtml(data.userFunction || "Agent Administratif")}
+          ${escapeHtml(data.userFunction || "N/A")}
         </td>
-        <td rowspan="3" style="width: 100pt; font-weight: bold; font-size: 8.5pt; vertical-align: middle;">
+        <td rowspan="3" style="width: 100pt; font-weight: bold; font-size: 8.5pt; vertical-align: middle; text-align: center;">
           Entité : Société des Boissons du Maroc (SBM)
         </td>
       </tr>
       <tr>
         <td class="label-cell">Téléphone</td>
-        <td class="value-cell" style="font-weight: bold;">${escapeHtml(data.simCardNumber || data.userPhone || "____________________")}</td>
-        <td>
+        <td class="value-cell" style="font-weight: bold; text-align: center;">${escapeHtml(data.simCardNumber || data.userPhone || "N/A")}</td>
+        <td style="text-align: center;">
           <div class="label-inner">Courriel :</div>
-          <span style="font-size: 8.5pt;">${escapeHtml(data.userEmail || "")}</span>
+          <span style="font-size: 8.5pt;">${escapeHtml(data.userEmail || "N/A")}</span>
         </td>
       </tr>
       <tr>
         <td class="label-cell">Responsable hiérarchique</td>
-        <td class="value-cell" style="font-weight: bold;">${escapeHtml(data.hierarchicalManager || "Yassine ELHADI")}</td>
-        <td>
+        <td class="value-cell" style="font-weight: bold; text-align: center;">${escapeHtml(data.hierarchicalManager || "N/A")}</td>
+        <td style="text-align: center;">
           <div class="label-inner">Fonction :</div>
-          ${escapeHtml(data.hierarchicalManagerFunction || "Chef Département Moyens Généraux")}
+          ${escapeHtml(data.hierarchicalManagerFunction || "N/A")}
         </td>
       </tr>
       <tr>
         <td class="label-cell">Actif attribué</td>
         <td colspan="3">
-          <div style="display: flex; gap: 40pt; align-items: center; padding: 2pt 0;">
+          <div style="display: flex; gap: 40pt; align-items: center; justify-content: flex-start; text-align: left; padding: 2pt 0;">
             <span><div class="checkbox ${data.assetType === 'computer' ? 'checked' : ''}"></div> Ordinateur avec accessoires</span>
             <span><div class="checkbox ${data.assetType === 'phone' || !data.assetType ? 'checked' : ''}"></div> Téléphone mobile</span>
           </div>
@@ -144,19 +163,19 @@ export function printAttributionForm(data: AttributionPrintData): void {
         <td class="label-cell">Référence de l'actif</td>
         <td colspan="3" class="value-cell">
           <div style="display: flex; justify-content: space-between; font-weight: bold;">
-            <span>${escapeHtml(data.phoneModel || "____________________")}</span>
-            <span style="font-weight: normal;">IMEI : <span style="font-weight: bold;">${escapeHtml(data.phoneImei || "____________________")}</span></span>
+            <span>${escapeHtml(data.phoneModel || "N/A")}</span>
+            <span style="font-weight: normal;">IMEI : <span style="font-weight: bold;">${escapeHtml(data.phoneImei || "N/A")}</span></span>
           </div>
         </td>
       </tr>
       <tr>
         <td class="label-cell">Constructeur</td>
-        <td colspan="3" class="value-cell" style="font-weight: bold;">${escapeHtml(deviceBrand)}</td>
+        <td colspan="3" class="value-cell" style="font-weight: bold;">${escapeHtml(deviceBrand || "N/A")}</td>
       </tr>
       <tr>
         <td class="label-cell">Solution de chiffrement</td>
         <td colspan="3">
-          <div style="display: flex; gap: 50pt;">
+          <div style="display: flex; justify-content: flex-start; gap: 50pt; text-align: left;">
             <div>
               <div style="margin-bottom: 3pt;"><div class="checkbox"></div> Installée</div>
               <div><div class="checkbox"></div> Mise à jour</div>
@@ -171,7 +190,7 @@ export function printAttributionForm(data: AttributionPrintData): void {
       <tr>
         <td class="label-cell">Solution Antivirale</td>
         <td colspan="3">
-          <div style="display: flex; gap: 50pt;">
+          <div style="display: flex; justify-content: flex-start; gap: 50pt; text-align: left;">
             <div>
               <div style="margin-bottom: 3pt;"><div class="checkbox"></div> Installée</div>
               <div><div class="checkbox"></div> Mise à jour</div>
@@ -290,6 +309,30 @@ export function printAttributionForm(data: AttributionPrintData): void {
       </div>
     </div>
   </div>
+  </div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+  <script>
+    window.onload = function() {
+      setTimeout(function() {
+        var element = document.getElementById('print-content');
+        var opt = {
+          margin:       0,
+          filename:     'Fiche_Attribution_${escapeHtml(data.userName || "Actif").replace(/\s+/g, "_")}.pdf',
+          image:        { type: 'jpeg', quality: 0.98 },
+          html2canvas:  { scale: 2, useCORS: true },
+          jsPDF:        { unit: 'in', format: 'a4', orientation: 'portrait' }
+        };
+        
+        html2pdf().set(opt).from(element).save().then(function() {
+          document.getElementById('loading-overlay').style.display = 'none';
+          setTimeout(function() {
+            window.print();
+          }, 300);
+        });
+      }, 500); // Give images a moment to load
+    };
+  </script>
 </body>
 </html>`;
 
@@ -301,9 +344,6 @@ export function printAttributionForm(data: AttributionPrintData): void {
   printWindow.document.write(html);
   printWindow.document.close();
   printWindow.focus();
-  setTimeout(() => {
-    printWindow.print();
-  }, 500);
 }
 
 function escapeHtml(str: string): string {

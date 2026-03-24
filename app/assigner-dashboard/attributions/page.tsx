@@ -30,9 +30,12 @@ import {
   Globe,
   Bell,
   Download,
+  Printer,
 } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { AttributionManagementApi } from "@/api/generated/apis/attribution-management-api"
+import { PhoneManagementApi } from "@/api/generated/apis/phone-management-api"
+import { printAttributionForm } from "@/lib/attribution-print"
 import { SIMCardManagementApi } from "@/api/generated/apis/simcard-management-api"
 import { UserManagementApi } from "@/api/generated/apis/user-management-api"
 import { getApiConfig } from "@/lib/apiClient"
@@ -995,33 +998,105 @@ export default function AssignerAttributionsPage() {
                               </div>
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap">
-                              <DropdownMenu>
-                                <DropdownMenuTrigger asChild>
-                                  <Button variant="ghost" className="h-8 w-8 p-0">
-                                    <MoreHorizontal className="h-4 w-4" />
+                              <div className="flex items-center space-x-2">
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  title="Imprimer la fiche"
+                                  onClick={async (e) => {
+                                    e.stopPropagation()
+                                    
+                                    let imei = (attribution as any).phoneImei;
+                                    let brand = (attribution as any).phoneBrand;
+                                    let position = (attribution as any).userFunction;
+                                    let managerName = (attribution as any).hierarchicalManager;
+                                    let managerPosition = (attribution as any).hierarchicalManagerFunction;
+                                    
+                                    try {
+                                      const token = localStorage.getItem("jwt_token");
+                                      if (token) {
+                                        if ((!imei || !brand) && attribution.phoneId) {
+                                          const phoneApi = new PhoneManagementApi(getApiConfig(token));
+                                          const phoneRes = await phoneApi.getPhoneById(Number(attribution.phoneId));
+                                          const pObj = (phoneRes.data as any)?.phone || (phoneRes.data as any)?.data?.phone || (phoneRes.data as any)?.data || phoneRes.data;
+                                          if (pObj) {
+                                            imei = pObj.imei;
+                                            brand = pObj.brand;
+                                          }
+                                        }
+
+                                        if (!position || !managerName) {
+                                           const userApi = new UserManagementApi(getApiConfig(token));
+                                           const userRes = await userApi.getUsers(1, 10000);
+                                           const usersList = (userRes.data as any).users || (userRes.data as any).data?.users || (userRes.data as any).content || (Array.isArray(userRes.data) ? userRes.data : []);
+                                           const beneficiary = usersList.find((u: any) => String(u.id) === String(attribution.userId));
+                                           
+                                           position = position || beneficiary?.position;
+                                           managerName = managerName || beneficiary?.manager;
+                                           
+                                           if (managerName && !managerPosition) {
+                                             const mgrUser = usersList.find((u: any) => u.name === managerName);
+                                             managerPosition = mgrUser?.position;
+                                           }
+                                        }
+                                      }
+                                    } catch (err) {
+                                      console.error("Error fetching extra data for print:", err);
+                                    }
+
+                                    printAttributionForm({
+                                      userName: attribution.userName,
+                                      userEmail: attribution.userEmail,
+                                      userFunction: position,
+                                      hierarchicalManager: managerName,
+                                      hierarchicalManagerFunction: managerPosition,
+                                      phoneModel: attribution.phoneModel,
+                                      phoneBrand: brand,
+                                      phoneImei: imei,
+                                      simCardNumber: attribution.simCardNumber,
+                                      assignedBy: attribution.assignedBy,
+                                      assignmentDate: attribution.assignmentDate,
+                                      assetType: attribution.phoneModel ? "phone" : undefined,
+                                    })
+                                  }}
+                                  className="text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+                                >
+                                  <Printer className="h-4 w-4" />
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    handleEdit(attribution)
+                                  }}
+                                >
+                                  <Edit className="h-4 w-4" />
+                                </Button>
+                                {attribution.status === "ACTIVE" && (
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={(e) => {
+                                      e.stopPropagation()
+                                      handleReturn(attribution.id)
+                                    }}
+                                  >
+                                    <RotateCcw className="h-4 w-4" />
                                   </Button>
-                                </DropdownMenuTrigger>
-                                <DropdownMenuContent align="end">
-                                  <DropdownMenuItem onClick={() => handleView(attribution)}>
-                                    <Eye className="mr-2 h-4 w-4" />
-                                    Voir détails
-                                  </DropdownMenuItem>
-                                  <DropdownMenuItem onClick={() => handleEdit(attribution)}>
-                                    <Edit className="mr-2 h-4 w-4" />
-                                    Modifier
-                                  </DropdownMenuItem>
-                                  {attribution.status === "ACTIVE" && (
-                                    <DropdownMenuItem onClick={() => handleReturn(attribution.id)}>
-                                      <RotateCcw className="mr-2 h-4 w-4" />
-                                      Retourner
-                                    </DropdownMenuItem>
-                                  )}
-                                  <DropdownMenuItem onClick={() => handleDelete(attribution.id)} className="text-red-600">
-                                    <Trash2 className="mr-2 h-4 w-4" />
-                                    Supprimer
-                                  </DropdownMenuItem>
-                                </DropdownMenuContent>
-                              </DropdownMenu>
+                                )}
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    handleDelete(attribution.id)
+                                  }}
+                                  className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              </div>
                             </td>
                           </tr>
                         ))}
