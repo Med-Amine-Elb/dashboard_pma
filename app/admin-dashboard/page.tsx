@@ -117,7 +117,10 @@ export default function AdminDashboard() {
         legend: { data: ['Attributions', 'Retours'], bottom: 0 },
         grid: { left: '3%', right: '4%', bottom: '15%', containLabel: true },
         xAxis: { type: 'category', data: monthlyAttributions.map((m: any) => m.name) },
-        yAxis: { type: 'value' },
+        yAxis: { 
+          type: 'value',
+          minInterval: 1,
+        },
         series: [
           {
             name: 'Attributions',
@@ -150,7 +153,10 @@ export default function AdminDashboard() {
       departmentOption: {
         tooltip: { trigger: 'axis' },
         grid: { left: '3%', right: '4%', bottom: '3%', containLabel: true },
-        xAxis: { type: 'value' },
+        xAxis: { 
+          type: 'value',
+          minInterval: 1,
+         },
         yAxis: { type: 'category', data: departmentStats.map((d: any) => d.name) },
         series: [
           {
@@ -159,9 +165,24 @@ export default function AdminDashboard() {
             data: departmentStats.map((d: any) => d.value1),
             itemStyle: { 
               borderRadius: [0, 4, 4, 0],
-              color: {
-                type: 'linear', x: 0, y: 0, x2: 1, y2: 0,
-                colorStops: [{ offset: 0, color: '#3B82F6' }, { offset: 1, color: '#60A5FA' }]
+              color: (params: any) => {
+                const colorPairs = [
+                  ['#3B82F6', '#60A5FA'], // Blue
+                  ['#10B981', '#34D399'], // Green
+                  ['#F59E0B', '#FBBF24'], // Yellow/Orange
+                  ['#8B5CF6', '#A78BFA'], // Purple
+                  ['#EC4899', '#F472B6'], // Pink
+                  ['#EF4444', '#F87171'], // Red
+                  ['#06B6D4', '#22D3EE'], // Cyan
+                ];
+                const pair = colorPairs[params.dataIndex % colorPairs.length];
+                return {
+                  type: 'linear', x: 0, y: 0, x2: 1, y2: 0,
+                  colorStops: [
+                    { offset: 0, color: pair[0] },
+                    { offset: 1, color: pair[1] }
+                  ]
+                };
               }
             }
           }

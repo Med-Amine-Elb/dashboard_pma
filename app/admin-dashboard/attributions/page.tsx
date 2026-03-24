@@ -6,13 +6,16 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { Search, Bell, Plus, Download, Edit, Trash2, Globe, Phone } from "lucide-react"
+import { Search, Bell, Plus, Download, Edit, Trash2, Globe, Phone, Printer } from "lucide-react"
+import { printAttributionForm } from "@/lib/attribution-print"
 import { Pagination, PaginationContent, PaginationItem, PaginationLink, PaginationNext, PaginationPrevious } from "@/components/ui/pagination"
 import { Sidebar } from "@/components/sidebar"
 import { DataTable } from "@/components/data-table"
 import { AttributionModal } from "@/components/attribution-modal"
 import { useToast } from "@/hooks/use-toast"
 import { AttributionManagementApi } from "@/api/generated/apis/attribution-management-api";
+import { PhoneManagementApi } from "@/api/generated/apis/phone-management-api"
+import { UserManagementApi } from "@/api/generated/apis/user-management-api"
 import { AttributionDtoStatusEnum } from "@/api/generated/models/attribution-dto";
 import { getApiConfig } from "@/lib/apiClient";
 import { useUser } from "@/contexts/UserContext";
@@ -24,8 +27,14 @@ interface Attribution {
   userId: string
   userName: string
   userEmail: string
+  userPhone?: string
+  userFunction?: string
+  hierarchicalManager?: string
+  hierarchicalManagerFunction?: string
   phoneId?: string
   phoneModel?: string
+  phoneBrand?: string
+  phoneImei?: string
   simCardId?: string
   simCardNumber?: string
   assignedBy: string
@@ -53,6 +62,9 @@ export default function AttributionsPage() {
   const [limit, setLimit] = useState(10)
   const [total, setTotal] = useState(0)
   const [totalPages, setTotalPages] = useState(0)
+  const [lastCreatedAttribution, setLastCreatedAttribution] = useState<Partial<Attribution> | null>(null)
+  const [allPhones, setAllPhones] = useState<any[]>([])
+  const [allUsers, setAllUsers] = useState<any[]>([])
 
   const getPageNumbers = () => {
     const pages: number[] = []
@@ -111,53 +123,106 @@ export default function AttributionsPage() {
       }
 
       const api = new AttributionManagementApi(getApiConfig(token))
-      console.log("API config:", getApiConfig(token))
-      console.log("Fetching attributions...")
+      const phoneApi = new PhoneManagementApi(getApiConfig(token))
+      const userApi = new UserManagementApi(getApiConfig(token))
       
-      const res = await api.getAttributions(1, 10000)
-      console.log("API Response:", res)
-      console.log("Response data:", res.data)
-      console.log("Response status:", res.status)
+      console.log("Fetching attributions, phones and users...")
+      
+      let res: any;
+      let phonesList: any[] = [];
+      let usersList: any[] = [];
+
+      try {
+        const [attributionsRes, phonesRes, usersRes] = await Promise.allSettled([
+          api.getAttributions(1, 10000),
+          phoneApi.getPhones(1, 1000),
+          userApi.getUsers(1, 1000)
+        ]);
+
+        if (attributionsRes.status === 'fulfilled') {
+          res = attributionsRes.value;
+        } else {
+          throw attributionsRes.reason;
+        }
+
+        if (phonesRes.status === 'fulfilled') {
+          console.log("Phones API success. Raw data:", phonesRes.value.data);
+          phonesList = (phonesRes.value.data as any).phones || 
+                       (phonesRes.value.data as any).data?.phones || 
+                       (Array.isArray(phonesRes.value.data) ? phonesRes.value.data : []);
+          console.log("Extracted phones count:", phonesList.length);
+          setAllPhones(phonesList);
+        }
+
+        if (usersRes.status === 'fulfilled') {
+          console.log("Users API success. Raw data:", usersRes.value.data);
+          usersList = (usersRes.value.data as any).users || 
+                      (usersRes.value.data as any).data?.users || 
+                      (Array.isArray(usersRes.value.data) ? usersRes.value.data : []);
+          console.log("Extracted users count:", usersList.length);
+          setAllUsers(usersList);
+        }
+      } catch (e: any) {
+        console.error("Critical error in fetchAttributions:", e);
+        throw e;
+      }
       
       // Correctly extract attributions from backend response
       let apiAttributions: any[] = [];
       let meta: any = {}
-      if (Array.isArray(res.data)) {
+      if (res && Array.isArray(res.data)) {
         apiAttributions = res.data;
       } else if (
-        res.data && typeof res.data === 'object' &&
+        res && res.data && typeof res.data === 'object' &&
         res.data.data && typeof res.data.data === 'object' &&
         Array.isArray((res.data.data as any).attributions)
       ) {
         apiAttributions = (res.data.data as any).attributions;
         meta = (res.data.data as any).pagination || {}
       } else if (
-        res.data && typeof res.data === 'object' &&
+        res && res.data && typeof res.data === 'object' &&
         Array.isArray((res.data as any).attributions)
       ) {
         apiAttributions = (res.data as any).attributions;
         meta = (res.data as any).pagination || {}
       }
       
-      console.log("Processed attributions:", apiAttributions)
+      console.log("Processing attributions for mapping. Phones count:", phonesList.length, "Users count:", usersList.length);
       
-      const mappedAttributions = (Array.isArray(apiAttributions) ? apiAttributions : []).map((a: any) => ({
-        id: String(a.id),
-        userId: String(a.userId),
-        userName: a.userName || "",
-        userEmail: a.userEmail || "",
-        phoneId: a.phoneId ? String(a.phoneId) : undefined,
-        phoneModel: a.phoneModel || undefined,
-        simCardId: a.simCardId ? String(a.simCardId) : undefined,
-        simCardNumber: a.simCardNumber || undefined,
-        assignedBy: a.assignedByName || "",
-        assignmentDate: a.assignmentDate || "",
-        returnDate: a.returnDate || undefined,
-        status: (a.status || "ACTIVE").toUpperCase(),
-        notes: a.notes || undefined,
-      }))
+      const mappedAttributions = (Array.isArray(apiAttributions) ? apiAttributions : []).map((a: any) => {
+        // Robust ID matching: handle both number and string
+        const phone = a.phoneId ? phonesList.find((p: any) => String(p.id) === String(a.phoneId)) : null;
+        const beneficiary = a.userId ? usersList.find((u: any) => String(u.id) === String(a.userId)) : null;
+        const manager = beneficiary?.manager ? usersList.find((u: any) => u.name === beneficiary.manager) : null;
+
+        if (a.phoneId && !phone) {
+          console.warn(`Could not find phone for attribution ${a.id}, searched phoneId: ${a.phoneId}`);
+        }
+
+        return {
+          id: String(a.id),
+          userId: String(a.userId),
+          userName: a.userName || beneficiary?.name || "",
+          userEmail: a.userEmail || beneficiary?.email || "",
+          userPhone: a.userPhone || beneficiary?.phone || undefined,
+          userFunction: a.userFunction || beneficiary?.position || "Agent Administratif",
+          hierarchicalManager: a.hierarchicalManager || beneficiary?.manager || "Yassine ELHADI",
+          hierarchicalManagerFunction: a.hierarchicalManagerFunction || manager?.position || "Chef Département Moyens Généraux",
+          phoneId: a.phoneId ? String(a.phoneId) : undefined,
+          phoneModel: a.phoneModel || phone?.model || "____________________",
+          phoneBrand: a.phoneBrand || phone?.brand || undefined,
+          phoneImei: a.phoneImei || phone?.imei || "____________________",
+          simCardId: a.simCardId ? String(a.simCardId) : undefined,
+          simCardNumber: a.simCardNumber || undefined,
+          assignedBy: a.assignedByName || "",
+          assignmentDate: a.assignmentDate || "",
+          returnDate: a.returnDate || undefined,
+          status: (a.status || "ACTIVE").toUpperCase(),
+          notes: a.notes || undefined,
+        }
+      })
       
-      console.log("Mapped attributions:", mappedAttributions)
+      console.log("Mapped attributions sample:", mappedAttributions.slice(0, 2))
       setAttributions(mappedAttributions)
       if (meta) {
         setTotal(meta.total ?? mappedAttributions.length)
@@ -388,6 +453,9 @@ export default function AttributionsPage() {
         };
         console.log("Create payload:", createPayload);
         await attributionApi.createAttribution(createPayload)
+        
+        // Store the created attribution data for the print banner
+        setLastCreatedAttribution(attributionData)
         
         toast({
           title: "Attribution créée",
@@ -708,6 +776,74 @@ export default function AttributionsPage() {
 
           {/* Content */}
           <div className="p-6">
+
+            {/* Print banner after attribution creation */}
+            {lastCreatedAttribution && (
+              <div className="mb-4 p-4 bg-emerald-50 border border-emerald-300 rounded-xl flex items-center justify-between shadow">
+                <div className="flex items-center space-x-3">
+                  <div className="flex items-center justify-center w-10 h-10 rounded-full bg-emerald-100">
+                    <Printer className="h-5 w-5 text-emerald-600" />
+                  </div>
+                  <div>
+                    <p className="font-semibold text-emerald-800">Attribution créée avec succès !</p>
+                    <p className="text-sm text-emerald-600">Générez et imprimez la fiche d'attribution à faire signer par le collaborateur.</p>
+                  </div>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <Button
+                    className="bg-emerald-600 hover:bg-emerald-700 text-white"
+                    onClick={async () => {
+                      let imei = lastCreatedAttribution.phoneImei;
+                      let brand = lastCreatedAttribution.phoneBrand;
+                      
+                      // Try to fetch phone details if needed
+                      if ((!imei || !brand) && lastCreatedAttribution.phoneId) {
+                        try {
+                          const token = localStorage.getItem("jwt_token");
+                          if (token) {
+                            const phoneApi = new PhoneManagementApi(getApiConfig(token));
+                            const phoneRes = await phoneApi.getPhoneById(Number(lastCreatedAttribution.phoneId));
+                            if (phoneRes.data) {
+                              imei = (phoneRes.data as any).imei;
+                              brand = (phoneRes.data as any).brand;
+                            }
+                          }
+                        } catch (e) {
+                          console.error("Error fetching phone for print:", e);
+                        }
+                      }
+
+                      printAttributionForm({
+                        userName: lastCreatedAttribution.userName || "",
+                        userEmail: lastCreatedAttribution.userEmail,
+                        userFunction: (lastCreatedAttribution as any).userFunction,
+                        hierarchicalManager: (lastCreatedAttribution as any).hierarchicalManager,
+                        hierarchicalManagerFunction: (lastCreatedAttribution as any).hierarchicalManagerFunction,
+                        phoneModel: lastCreatedAttribution.phoneModel,
+                        phoneBrand: brand,
+                        phoneImei: imei,
+                        simCardNumber: lastCreatedAttribution.simCardNumber,
+                        assignedBy: lastCreatedAttribution.assignedBy,
+                        assignmentDate: lastCreatedAttribution.assignmentDate,
+                        assetType: lastCreatedAttribution.phoneModel ? "phone" : undefined,
+                      })
+                    }}
+                  >
+                    <Printer className="h-4 w-4 mr-2" />
+                    Imprimer la fiche
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setLastCreatedAttribution(null)}
+                    className="text-emerald-600 hover:text-emerald-700"
+                  >
+                    ✕
+                  </Button>
+                </div>
+              </div>
+            )}
+
             <Card className="bg-white/90 backdrop-blur-xl border-0 shadow-xl">
               <CardHeader>
                 <div className="flex items-center justify-between">
@@ -771,6 +907,51 @@ export default function AttributionsPage() {
                     if (key === "actions") {
                       return (
                         <div className="flex items-center space-x-2">
+                           <Button
+                            size="sm"
+                            variant="outline"
+                            title="Imprimer la fiche"
+                            onClick={async (e) => {
+                              e.stopPropagation()
+                              
+                              let imei = attr.phoneImei;
+                              let brand = attr.phoneBrand;
+                              
+                              if ((!imei || !brand) && attr.phoneId) {
+                                try {
+                                  const token = localStorage.getItem("jwt_token");
+                                  if (token) {
+                                    const phoneApi = new PhoneManagementApi(getApiConfig(token));
+                                    const phoneRes = await phoneApi.getPhoneById(Number(attr.phoneId));
+                                    if (phoneRes.data) {
+                                      imei = (phoneRes.data as any).imei;
+                                      brand = (phoneRes.data as any).brand;
+                                    }
+                                  }
+                                } catch (err) {
+                                  console.error("Error fetching phone for print button:", err);
+                                }
+                              }
+
+                              printAttributionForm({
+                                userName: attr.userName,
+                                userEmail: attr.userEmail,
+                                userFunction: attr.userFunction,
+                                hierarchicalManager: attr.hierarchicalManager,
+                                hierarchicalManagerFunction: attr.hierarchicalManagerFunction,
+                                phoneModel: attr.phoneModel,
+                                phoneBrand: brand,
+                                phoneImei: imei,
+                                simCardNumber: attr.simCardNumber,
+                                assignedBy: attr.assignedBy,
+                                assignmentDate: attr.assignmentDate,
+                                assetType: attr.phoneModel ? "phone" : undefined,
+                              })
+                            }}
+                            className="text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+                          >
+                            <Printer className="h-4 w-4" />
+                          </Button>
                           <Button
                             size="sm"
                             variant="outline"
