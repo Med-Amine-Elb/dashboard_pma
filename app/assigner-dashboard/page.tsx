@@ -53,6 +53,7 @@ import { useSidebar } from "@/contexts/SidebarContext"
 import { clearAuthCookies } from "@/lib/authCookies"
 import { NotificationsDropdown } from "@/components/notifications-dropdown"
 import { DashboardHeader } from "@/components/dashboard-header"
+import { DashboardReportingApi } from "@/api/generated/apis/dashboard-reporting-api";
 
 // Dynamically import ECharts components to avoid SSR issues
 const ReactECharts = dynamic(() => import("echarts-for-react"), { ssr: false })
@@ -69,6 +70,7 @@ interface DashboardStats {
   monthlyAttributions: number[]
   monthlyReturns: number[]
   deviceDistribution: { name: string; value: number }[]
+  simCarrierDistribution: { name: string; value: number }[]
   recentActivity: Array<{
     user: string
     action: string
@@ -88,6 +90,8 @@ const fetcher = async () => {
   const phoneApi = new PhoneManagementApi(getApiConfig(token))
   const simApi = new SIMCardManagementApi(getApiConfig(token))
 
+  const dashboardApi = new DashboardReportingApi(getApiConfig(token))
+
   const safeFetch = (promise: Promise<any>) => 
     promise.catch(err => {
       if (err?.response?.status === 401 || err?.response?.status === 403) {
@@ -99,11 +103,13 @@ const fetcher = async () => {
       return { data: [] };
     });
 
-  const [attributionsRes, usersRes, phonesRes, simsRes] = await Promise.all([
+  const [attributionsRes, usersRes, phonesRes, simsRes, overviewRes, simStatsRes] = await Promise.all([
     safeFetch(attributionApi.getAttributions(1, 1000, undefined, undefined, undefined, undefined)),
     safeFetch(userApi.getUsers(1, 1000, undefined, undefined, undefined, undefined)),
     safeFetch(phoneApi.getPhones(1, 1000)),
-    safeFetch(simApi.getSimCards(1, 1000))
+    safeFetch(simApi.getSimCards(1, 1000)),
+    safeFetch(dashboardApi.getDashboardOverview()),
+    safeFetch(dashboardApi.getSimCardStats())
   ])
 
   let attributions = []
@@ -128,7 +134,10 @@ const fetcher = async () => {
     sims = simData.success && simData.data ? simData.data.simcards || simData.data.simCards : simData.simcards || simData.simCards || Array.isArray(simData) ? simData : []
   }
 
-  return { attributions, users, phones, sims }
+  const overviewData = (overviewRes.data as any)?.data || {}
+  const simCardData = (simStatsRes.data as any)?.data || {}
+
+  return { attributions, users, phones, sims, overviewData, simCardData }
 }
 
 export default function AssignerDashboard() {
@@ -160,7 +169,7 @@ export default function AssignerDashboard() {
     }
   }, [swrError, toast])
 
-  const stats = useMemo(() => {
+  const stats: DashboardStats = useMemo(() => {
     if (!data) return {
       activeAttributions: 0,
       pendingAttributions: 0,
@@ -173,10 +182,11 @@ export default function AssignerDashboard() {
       monthlyAttributions: [0, 0, 0, 0, 0, 0],
       monthlyReturns: [0, 0, 0, 0, 0, 0],
       deviceDistribution: [],
+      simCarrierDistribution: [],
       recentActivity: []
     }
 
-    const { attributions, users, phones, sims } = data
+    const { attributions, users, phones, sims, overviewData, simCardData } = data
 
     const activeAttributions = attributions.filter((attr: any) => attr.status === "ACTIVE").length
     const pendingAttributions = attributions.filter((attr: any) => attr.status === "PENDING").length
@@ -225,9 +235,10 @@ export default function AssignerDashboard() {
       totalSims,
       assignedPhones,
       assignedSims,
-      monthlyAttributions: [0, 0, 0, 0, 0, 0],
-      monthlyReturns: [0, 0, 0, 0, 0, 0],
+      monthlyAttributions: overviewData.monthlyStats ? overviewData.monthlyStats.map((m: any) => m.attributions || 0) : [0, 0, 0, 0, 0, 0],
+      monthlyReturns: overviewData.monthlyStats ? overviewData.monthlyStats.map((m: any) => m.returns || 0) : [0, 0, 0, 0, 0, 0],
       deviceDistribution,
+      simCarrierDistribution: simCardData.carrierDistribution ? Object.entries(simCardData.carrierDistribution).map(([name, value]) => ({ name, value: value as number })) : [],
       recentActivity
     }
   }, [data, searchTerm])
@@ -366,7 +377,7 @@ export default function AssignerDashboard() {
     },
     xAxis: {
       type: "category",
-      data: ["Jan", "Fév", "Mar", "Avr", "Mai", "Jun"],
+      data: (data as any)?.overviewData?.monthlyStats?.map((m: any) => m.month) || ["Jan", "Fév", "Mar", "Avr", "Mai", "Jun"],
     },
     yAxis: {
       type: "value",
@@ -431,9 +442,9 @@ export default function AssignerDashboard() {
   }
 
   // ECharts options for monthly activity
-  const monthlyActivityOption = {
+  const simCarrierOption = {
     title: {
-      text: "Activité Mensuelle",
+      text: "Répartition par Opérateur (SIM)",
       left: "center",
       textStyle: {
         fontSize: 16,
@@ -441,23 +452,41 @@ export default function AssignerDashboard() {
       },
     },
     tooltip: {
-      trigger: "axis",
+      trigger: "item",
+      formatter: "{a} <br/>{b}: {c} ({d}%)",
     },
-    xAxis: {
-      type: "category",
-      data: ["Sem 1", "Sem 2", "Sem 3", "Sem 4"],
-    },
-    yAxis: {
-      type: "value",
+    legend: {
+      orient: "vertical",
+      left: "left",
     },
     series: [
       {
-        data: [stats.activeAttributions, stats.pendingAttributions, stats.assignedPhones, stats.assignedSims],
-        type: "bar",
+        name: "Opérateurs",
+        type: "pie",
+        radius: ["40%", "70%"],
+        avoidLabelOverlap: false,
         itemStyle: {
-          color: "#10b981",
+          borderRadius: 10,
+          borderColor: "#fff",
+          borderWidth: 2,
         },
-        barWidth: "60%",
+        label: {
+          show: false,
+          position: "center",
+        },
+        emphasis: {
+          label: {
+            show: true,
+            fontSize: 20,
+            fontWeight: "bold",
+          },
+        },
+        labelLine: {
+          show: false,
+        },
+        data: stats.simCarrierDistribution?.length > 0 ? stats.simCarrierDistribution : [
+          { value: 0, name: "Aucune SIM" }
+        ],
       },
     ],
   }
@@ -610,7 +639,7 @@ export default function AssignerDashboard() {
             </Card>
             <Card className="bg-white/80 backdrop-blur-sm">
               <CardContent className="p-6">
-                <ReactECharts option={monthlyActivityOption} style={{ height: "300px" }} />
+                <ReactECharts option={simCarrierOption} style={{ height: "300px" }} />
               </CardContent>
             </Card>
           </div>
