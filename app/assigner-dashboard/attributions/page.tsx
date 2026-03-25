@@ -1083,22 +1083,22 @@ export default function AssignerAttributionsPage() {
                                     </Button>
                                   </DropdownMenuTrigger>
                                   <DropdownMenuContent align="end" className="w-48 bg-white border-gray-200">
-                                    <DropdownMenuItem onClick={() => handleView(attribution)} className="cursor-pointer">
+                                    <DropdownMenuItem onSelect={() => setTimeout(() => handleView(attribution), 100)} className="cursor-pointer">
                                       <Eye className="mr-2 h-4 w-4 text-blue-500" />
                                       <span>Voir les détails</span>
                                     </DropdownMenuItem>
-                                    <DropdownMenuItem onClick={() => handleEdit(attribution)} className="cursor-pointer">
+                                    <DropdownMenuItem onSelect={() => setTimeout(() => handleEdit(attribution), 100)} className="cursor-pointer">
                                       <Edit className="mr-2 h-4 w-4 text-gray-500" />
                                       <span>Modifier</span>
                                     </DropdownMenuItem>
                                     {attribution.status === "ACTIVE" && (
-                                      <DropdownMenuItem onClick={() => handleReturn(attribution.id)} className="cursor-pointer">
+                                      <DropdownMenuItem onSelect={() => setTimeout(() => handleReturn(attribution.id), 100)} className="cursor-pointer">
                                         <RotateCcw className="mr-2 h-4 w-4 text-amber-500" />
                                         <span>Retourner</span>
                                       </DropdownMenuItem>
                                     )}
                                     <DropdownMenuItem 
-                                      onClick={() => handleDelete(attribution.id)} 
+                                      onSelect={() => setTimeout(() => handleDelete(attribution.id), 100)} 
                                       className="text-red-600 focus:text-red-600 cursor-pointer"
                                     >
                                       <Trash2 className="mr-2 h-4 w-4" />

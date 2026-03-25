@@ -494,11 +494,11 @@ export default function AssignerDashboard() {
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end" className="w-56">
-                    <DropdownMenuItem onClick={handleProjectDetails}>
+                    <DropdownMenuItem onSelect={() => setTimeout(() => handleProjectDetails(), 100)}>
                       <Eye className="h-4 w-4 mr-2" />
                       Détails du projet
                     </DropdownMenuItem>
-                    <DropdownMenuItem onClick={handleEditProject}>
+                    <DropdownMenuItem onSelect={() => setTimeout(() => handleEditProject(), 100)}>
                       <Edit className="h-4 w-4 mr-2" />
                       {isEditing ? "Désactiver l'édition" : "Activer l'édition"}
                     </DropdownMenuItem>
