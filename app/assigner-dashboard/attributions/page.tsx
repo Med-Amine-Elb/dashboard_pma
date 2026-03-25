@@ -1075,51 +1075,37 @@ export default function AssignerAttributionsPage() {
                                 >
                                   <Printer className="h-4 w-4" />
                                 </Button>
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  title="Voir les détails"
-                                  onClick={(e) => {
-                                    e.stopPropagation()
-                                    handleView(attribution)
-                                  }}
-                                  className="text-blue-600 hover:text-blue-700 hover:bg-blue-50"
-                                >
-                                  <Eye className="h-4 w-4" />
-                                </Button>
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  onClick={(e) => {
-                                    e.stopPropagation()
-                                    handleEdit(attribution)
-                                  }}
-                                >
-                                  <Edit className="h-4 w-4" />
-                                </Button>
-                                {attribution.status === "ACTIVE" && (
-                                  <Button
-                                    size="sm"
-                                    variant="outline"
-                                    onClick={(e) => {
-                                      e.stopPropagation()
-                                      handleReturn(attribution.id)
-                                    }}
-                                  >
-                                    <RotateCcw className="h-4 w-4" />
-                                  </Button>
-                                )}
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  onClick={(e) => {
-                                    e.stopPropagation()
-                                    handleDelete(attribution.id)
-                                  }}
-                                  className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                                >
-                                  <Trash2 className="h-4 w-4" />
-                                </Button>
+                                <DropdownMenu>
+                                  <DropdownMenuTrigger asChild>
+                                    <Button variant="ghost" className="h-8 w-8 p-0">
+                                      <span className="sr-only">Open menu</span>
+                                      <MoreHorizontal className="h-4 w-4" />
+                                    </Button>
+                                  </DropdownMenuTrigger>
+                                  <DropdownMenuContent align="end" className="w-48 bg-white border-gray-200">
+                                    <DropdownMenuItem onClick={() => handleView(attribution)} className="cursor-pointer">
+                                      <Eye className="mr-2 h-4 w-4 text-blue-500" />
+                                      <span>Voir les détails</span>
+                                    </DropdownMenuItem>
+                                    <DropdownMenuItem onClick={() => handleEdit(attribution)} className="cursor-pointer">
+                                      <Edit className="mr-2 h-4 w-4 text-gray-500" />
+                                      <span>Modifier</span>
+                                    </DropdownMenuItem>
+                                    {attribution.status === "ACTIVE" && (
+                                      <DropdownMenuItem onClick={() => handleReturn(attribution.id)} className="cursor-pointer">
+                                        <RotateCcw className="mr-2 h-4 w-4 text-amber-500" />
+                                        <span>Retourner</span>
+                                      </DropdownMenuItem>
+                                    )}
+                                    <DropdownMenuItem 
+                                      onClick={() => handleDelete(attribution.id)} 
+                                      className="text-red-600 focus:text-red-600 cursor-pointer"
+                                    >
+                                      <Trash2 className="mr-2 h-4 w-4" />
+                                      <span>Supprimer</span>
+                                    </DropdownMenuItem>
+                                  </DropdownMenuContent>
+                                </DropdownMenu>
                               </div>
                             </td>
                           </tr>
