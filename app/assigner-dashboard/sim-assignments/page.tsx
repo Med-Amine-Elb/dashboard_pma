@@ -6,8 +6,15 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { Search, Bell, Globe, User, History, ChevronLeft, ChevronRight, Download, CreditCard, Plus, Phone } from "lucide-react"
+import { Search, Bell, Globe, User, History, ChevronLeft, ChevronRight, Download, CreditCard, Plus, Phone, Eye, Info, FileText, CheckCircle2, X, Smartphone, Calendar, Hash, Signal } from "lucide-react"
 import { Pagination, PaginationContent, PaginationItem, PaginationLink, PaginationNext, PaginationPrevious } from "@/components/ui/pagination"
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog"
 import { Sidebar } from "@/components/sidebar"
 import { DataTable } from "@/components/data-table"
 import { SimAssignmentModal } from "@/components/sim-assignment-modal"
@@ -34,6 +41,10 @@ interface SimCard {
   dataLimit: string
   monthlyFee: number
   iccid: string
+  activationDate?: string
+  pin?: string
+  puk?: string
+  notes?: string
 }
 
 interface AssignmentHistory {
@@ -76,6 +87,8 @@ export default function SimAssignmentsPage() {
     total: 0,
     totalPages: 0,
   })
+  const [showViewModal, setShowViewModal] = useState(false)
+  const [viewingSim, setViewingSim] = useState<SimCard | null>(null)
   const { toast } = useToast()
 
   useEffect(() => {
@@ -178,6 +191,10 @@ export default function SimAssignmentsPage() {
         dataLimit: sim.dataLimit || "Unlimited",
         monthlyFee: sim.monthlyFee || 0,
         iccid: sim.iccid || "",
+        activationDate: sim.activationDate || sim.createdAt || undefined,
+        pin: sim.pin || undefined,
+        puk: sim.puk || undefined,
+        notes: sim.notes || undefined,
       }))
 
       console.log("Transformed SIM cards:", transformedSimCards)
@@ -297,6 +314,11 @@ export default function SimAssignmentsPage() {
   const handleLogout = () => {
     localStorage.clear()
     window.location.href = "/"
+  }
+
+  const handleView = (sim: SimCard) => {
+    setViewingSim(sim)
+    setShowViewModal(true)
   }
 
   const handleAssignSim = (sim: SimCard) => {
@@ -907,6 +929,18 @@ export default function SimAssignmentsPage() {
                         if (key === "actions") {
                           return (
                             <div className="flex items-center space-x-2">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                title="Voir les détails"
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  handleView(sim)
+                                }}
+                                className="text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+                              >
+                                <Eye className="h-4 w-4" />
+                              </Button>
                               <Button size="sm" variant="outline" onClick={() => handleViewHistory(sim)}>
                                 <History className="h-4 w-4" />
                               </Button>
@@ -964,6 +998,181 @@ export default function SimAssignmentsPage() {
         onClose={() => setIsHistoryModalOpen(false)}
         history={selectedSimHistory}
       />
+
+      {/* Modal View Details */}
+      <Dialog open={showViewModal} onOpenChange={setShowViewModal}>
+        <DialogContent className="max-w-3xl p-0 overflow-hidden bg-white/95 backdrop-blur-xl border-gray-200 shadow-2xl">
+          <DialogHeader className="px-8 py-6 bg-gradient-to-r from-blue-600 to-indigo-700 text-white relative">
+            <div className="flex items-center justify-between">
+              <div>
+                <DialogTitle className="text-2xl font-bold flex items-center">
+                  <CreditCard className="mr-2 h-6 w-6" />
+                  Détails de la Carte SIM
+                </DialogTitle>
+                <DialogDescription className="text-blue-100 mt-1">
+                  Informations techniques, forfait et affectation
+                </DialogDescription>
+              </div>
+            </div>
+          </DialogHeader>
+
+          {viewingSim && (
+            <div className="px-8 py-8 space-y-8 max-h-[70vh] overflow-y-auto custom-scrollbar">
+              {/* SIM Header Section */}
+              <div className="flex items-center space-x-6 p-6 bg-blue-50/50 rounded-2xl border border-blue-100">
+                <div className="h-20 w-20 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-2xl flex items-center justify-center shadow-lg border-4 border-white">
+                  <CreditCard className="h-10 w-10 text-white" />
+                </div>
+                <div>
+                  <h3 className="text-2xl font-bold text-gray-900">{viewingSim.number}</h3>
+                  <p className="text-gray-500 font-medium">{viewingSim.carrier} - {viewingSim.plan}</p>
+                  <div className="flex items-center mt-2">
+                     <Badge className={getStatusColor(viewingSim.status)}>{viewingSim.status}</Badge>
+                  </div>
+                </div>
+              </div>
+
+              {/* Grid Information */}
+              <div className="grid grid-cols-2 gap-8 px-2">
+                {/* Technical Information */}
+                <div className="space-y-4">
+                  <h4 className="text-sm font-semibold text-blue-600 uppercase tracking-wider flex items-center">
+                    <Info className="mr-2 h-4 w-4" />
+                    Spécifications Techniques
+                  </h4>
+                  <div className="space-y-3">
+                    <div className="flex items-start justify-between py-2 border-b border-gray-100">
+                      <span className="text-gray-500 text-sm">ICCID:</span>
+                      <span className="font-medium text-gray-900 font-mono text-xs">{viewingSim.iccid}</span>
+                    </div>
+                    <div className="flex items-start justify-between py-2 border-b border-gray-100">
+                      <span className="text-gray-500 text-sm">Numéro d'appel:</span>
+                      <span className="font-medium text-gray-900">{viewingSim.number}</span>
+                    </div>
+                    <div className="flex items-start justify-between py-2 border-b border-gray-100">
+                      <span className="text-gray-500 text-sm">Opérateur:</span>
+                      <span className="font-medium text-gray-900">{viewingSim.carrier}</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Plan Information */}
+                <div className="space-y-4">
+                  <h4 className="text-sm font-semibold text-blue-600 uppercase tracking-wider flex items-center">
+                    <Signal className="mr-2 h-4 w-4" />
+                    Forfait & Coûts
+                  </h4>
+                  <div className="space-y-3">
+                    <div className="flex items-start justify-between py-2 border-b border-gray-100">
+                      <span className="text-gray-500 text-sm">Forfait:</span>
+                      <span className="font-medium text-gray-900">{viewingSim.plan}</span>
+                    </div>
+                    <div className="flex items-start justify-between py-2 border-b border-gray-100">
+                      <span className="text-gray-500 text-sm">Limite Data:</span>
+                      <span className="font-medium text-gray-900">{viewingSim.dataLimit}</span>
+                    </div>
+                    <div className="flex items-start justify-between py-2 border-b border-gray-100">
+                      <span className="text-gray-500 text-sm">Coût Mensuel:</span>
+                      <span className="font-medium text-gray-900">{viewingSim.monthlyFee.toLocaleString()} MAD</span>
+                    </div>
+                    {viewingSim.activationDate && (
+                      <div className="flex items-start justify-between py-2 border-b border-gray-100">
+                        <span className="text-gray-500 text-sm">Date d'activation:</span>
+                        <span className="font-medium text-gray-900">
+                          {new Date(viewingSim.activationDate).toLocaleDateString("fr-FR")}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Security Information */}
+                <div className="space-y-4">
+                  <h4 className="text-sm font-semibold text-rose-600 uppercase tracking-wider flex items-center">
+                    <Info className="mr-2 h-4 w-4" />
+                    Sécurité (Codes)
+                  </h4>
+                  <div className="space-y-3">
+                    <div className="flex items-start justify-between py-2 border-b border-gray-100">
+                      <span className="text-gray-500 text-sm">Code PIN:</span>
+                      <span className="font-medium text-gray-900 font-mono tracking-widest bg-gray-100 px-2 rounded">
+                        {viewingSim.pin || "****"}
+                      </span>
+                    </div>
+                    <div className="flex items-start justify-between py-2 border-b border-gray-100">
+                      <span className="text-gray-500 text-sm">Code PUK:</span>
+                      <span className="font-medium text-gray-900 font-mono tracking-widest bg-gray-100 px-2 rounded">
+                        {viewingSim.puk || "********"}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Notes Section - Prominent position */}
+              <div className="space-y-4 pt-4 border-t border-gray-100">
+                <h4 className="text-sm font-semibold text-gray-900 uppercase tracking-wider flex items-center">
+                  <FileText className="mr-2 h-4 w-4" />
+                  Notes & Observations
+                </h4>
+                <div className="bg-amber-50/50 rounded-xl p-4 border border-amber-100 min-h-[80px]">
+                  {viewingSim.notes ? (
+                    <p className="text-gray-700 text-sm leading-relaxed">
+                      {viewingSim.notes}
+                    </p>
+                  ) : (
+                    <div className="flex flex-col items-center justify-center h-full text-gray-400">
+                      <p className="text-xs uppercase font-medium tracking-tighter italic">Aucune note pour cette carte SIM</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Assignment Information */}
+              <div className="space-y-4 pt-4 border-t border-gray-100">
+                <h4 className="text-sm font-semibold text-gray-900 uppercase tracking-wider flex items-center">
+                  <User className="mr-2 h-4 w-4" />
+                  Affectation Actuelle
+                </h4>
+                <div className="grid grid-cols-2 gap-8 px-2">
+                  <div className="bg-gray-50 rounded-xl p-4 border border-gray-100">
+                    <span className="text-gray-500 text-xs uppercase font-semibold block mb-1">Utilisateur</span>
+                    <div className="flex items-center text-gray-900 font-medium">
+                      {viewingSim.assignedTo ? (
+                        <>
+                          <User className="h-4 w-4 mr-2 text-blue-500" />
+                          {viewingSim.assignedTo}
+                        </>
+                      ) : (
+                        <span className="text-gray-400 italic font-normal">Aucun utilisateur assigné</span>
+                      )}
+                    </div>
+                  </div>
+                  <div className="bg-gray-50 rounded-xl p-4 border border-gray-100">
+                    <span className="text-gray-500 text-xs uppercase font-semibold block mb-1">Téléphone Associé</span>
+                    <div className="flex items-center text-gray-900 font-medium">
+                      {viewingSim.assignedPhone ? (
+                        <>
+                          <Smartphone className="h-4 w-4 mr-2 text-indigo-500" />
+                          {viewingSim.assignedPhone}
+                        </>
+                      ) : (
+                        <span className="text-gray-400 italic font-normal">Aucun téléphone associé</span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          <div className="px-8 py-6 bg-gray-50/80 border-t border-gray-200 flex justify-end">
+             <Button onClick={() => setShowViewModal(false)} className="bg-white hover:bg-gray-100 text-gray-700 border-gray-300">
+                Fermer
+             </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

@@ -7,7 +7,14 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { Search, Bell, Globe, Phone, Mail, Building, ChevronLeft, ChevronRight, RefreshCw, Download } from "lucide-react"
+import { Search, Bell, Globe, Phone, Mail, Building, ChevronLeft, ChevronRight, RefreshCw, Download, Eye, Info, FileText, CheckCircle2, X, User, Calendar, CreditCard, Smartphone } from "lucide-react"
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog"
 import { Pagination, PaginationContent, PaginationItem, PaginationLink, PaginationNext, PaginationPrevious } from "@/components/ui/pagination"
 import { Sidebar } from "@/components/sidebar"
 import { DataTable } from "@/components/data-table"
@@ -28,6 +35,8 @@ interface AssignerUser {
   department: string
   position: string
   phone?: string
+  address?: string
+  manager?: string
   status: "active" | "inactive"
   joinDate: string
   avatar?: string
@@ -89,6 +98,8 @@ const fetcher = async () => {
       status: (user.status === "ACTIVE" || user.status === "active") ? "active" : "inactive",
       joinDate: user.joinDate || "2024-01-01",
       avatar: user.avatar || undefined,
+      address: user.address || undefined,
+      manager: user.manager || undefined,
       assignedPhone: attribution?.phoneModel || attribution?.phone?.model || undefined,
       assignedSim: attribution?.simCardNumber || attribution?.simCard?.number || undefined,
     } as AssignerUser
@@ -106,6 +117,8 @@ export default function AssignerUsersPage() {
     total: 0,
     totalPages: 0,
   })
+  const [showViewModal, setShowViewModal] = useState(false)
+  const [viewingUser, setViewingUser] = useState<AssignerUser | null>(null)
 
   const user = useMemo(() => ({
     name: userData.name || "Assigner",
@@ -170,6 +183,11 @@ export default function AssignerUsersPage() {
   const handleLogout = () => {
     localStorage.clear()
     window.location.href = "/"
+  }
+
+  const handleView = (user: AssignerUser) => {
+    setViewingUser(user)
+    setShowViewModal(true)
   }
 
   const handlePageChange = (newPage: number) => {
@@ -454,6 +472,7 @@ export default function AssignerUsersPage() {
     { key: "assignedPhone", label: "Téléphone" },
     { key: "assignedSim", label: "SIM" },
     { key: "joinDate", label: "Date d'arrivée" },
+    { key: "actions", label: "Actions" },
   ]
 
   const getStatusColor = (status: string) => {
@@ -634,6 +653,24 @@ export default function AssignerUsersPage() {
                         if (key === "joinDate") {
                           return new Date(user.joinDate).toLocaleDateString("fr-FR")
                         }
+                        if (key === "actions") {
+                          return (
+                            <div className="flex items-center space-x-2">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                title="Voir les détails"
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  handleView(user)
+                                }}
+                                className="text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+                              >
+                                <Eye className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          )
+                        }
                         return user[key as keyof AssignerUser] || "-"
                       }}
                     />
@@ -645,6 +682,140 @@ export default function AssignerUsersPage() {
           </div>
         </div>
       </div>
+      {/* Modal View Details */}
+      <Dialog open={showViewModal} onOpenChange={setShowViewModal}>
+        <DialogContent className="max-w-3xl p-0 overflow-hidden bg-white/95 backdrop-blur-xl border-gray-200 shadow-2xl">
+          <DialogHeader className="px-8 py-6 bg-gradient-to-r from-blue-600 to-indigo-700 text-white relative">
+            <div className="flex items-center justify-between">
+              <div>
+                <DialogTitle className="text-2xl font-bold flex items-center">
+                  <User className="mr-2 h-6 w-6" />
+                  Profil Utilisateur
+                </DialogTitle>
+                <DialogDescription className="text-blue-100 mt-1">
+                  Détails personnels et affectations de l'utilisateur
+                </DialogDescription>
+              </div>
+            </div>
+          </DialogHeader>
+
+          {viewingUser && (
+            <div className="px-8 py-8 space-y-8 max-h-[70vh] overflow-y-auto custom-scrollbar">
+              {/* Profile Header Section */}
+              <div className="flex items-center space-x-6 p-6 bg-blue-50/50 rounded-2xl border border-blue-100">
+                <Avatar className="h-20 w-20 border-4 border-white shadow-lg">
+                  <AvatarImage src={viewingUser.avatar || "/placeholder.svg"} />
+                  <AvatarFallback className="bg-gradient-to-br from-blue-500 to-indigo-600 text-white text-2xl font-bold">
+                    {viewingUser.name
+                      .split(" ")
+                      .map((n) => n[0])
+                      .join("")}
+                  </AvatarFallback>
+                </Avatar>
+                <div>
+                  <h3 className="text-2xl font-bold text-gray-900">{viewingUser.name}</h3>
+                  <div className="flex flex-col space-y-1 mt-1">
+                    <div className="flex items-center text-gray-600">
+                      <Mail className="h-4 w-4 mr-2" />
+                      {viewingUser.email}
+                    </div>
+                    <div className="flex items-center mt-2">
+                       <Badge className={getStatusColor(viewingUser.status)}>{viewingUser.status}</Badge>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Grid Information */}
+              <div className="grid grid-cols-2 gap-8 px-2">
+                {/* Employment Information */}
+                <div className="space-y-4">
+                  <h4 className="text-sm font-semibold text-blue-600 uppercase tracking-wider flex items-center">
+                    <Building className="mr-2 h-4 w-4" />
+                    Informations Professionnelles
+                  </h4>
+                  <div className="space-y-3">
+                    <div className="flex items-start justify-between py-2 border-b border-gray-100">
+                      <span className="text-gray-500 text-sm">Département:</span>
+                      <span className="font-medium text-gray-900">{viewingUser.department}</span>
+                    </div>
+                    <div className="flex items-start justify-between py-2 border-b border-gray-100">
+                      <span className="text-gray-500 text-sm">Poste:</span>
+                      <span className="font-medium text-gray-900">{viewingUser.position}</span>
+                    </div>
+                    <div className="flex items-start justify-between py-2 border-b border-gray-100">
+                      <span className="text-gray-500 text-sm">Date d'arrivée:</span>
+                      <span className="font-medium text-gray-900">
+                        {new Date(viewingUser.joinDate).toLocaleDateString("fr-FR")}
+                      </span>
+                    </div>
+                    <div className="flex items-start justify-between py-2 border-b border-gray-100">
+                      <span className="text-gray-500 text-sm">Responsable:</span>
+                      <span className="font-medium text-gray-900">{viewingUser.manager || "Non renseigné"}</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Assigned Assets */}
+                <div className="space-y-4">
+                  <h4 className="text-sm font-semibold text-blue-600 uppercase tracking-wider flex items-center">
+                    <Smartphone className="mr-2 h-4 w-4" />
+                    Matériel Assigné
+                  </h4>
+                  <div className="space-y-3">
+                    <div className="flex items-start justify-between py-2 border-b border-gray-100">
+                      <span className="text-gray-500 text-sm">Téléphone:</span>
+                      <span className="font-medium text-gray-900 flex items-center">
+                        {viewingUser.assignedPhone ? (
+                          <>
+                            <Phone className="h-3 w-3 mr-1 text-blue-500" />
+                            {viewingUser.assignedPhone}
+                          </>
+                        ) : "Néant"}
+                      </span>
+                    </div>
+                    <div className="flex items-start justify-between py-2 border-b border-gray-100">
+                      <span className="text-gray-500 text-sm">Carte SIM:</span>
+                      <span className="font-medium text-gray-900 flex items-center">
+                        {viewingUser.assignedSim ? (
+                          <>
+                            <CreditCard className="h-3 w-3 mr-1 text-green-500" />
+                            {viewingUser.assignedSim}
+                          </>
+                        ) : "Néant"}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Contact Sidebar simulation */}
+              <div className="space-y-4 pt-4 border-t border-gray-100">
+                <h4 className="text-sm font-semibold text-gray-900 uppercase tracking-wider flex items-center">
+                  <Phone className="mr-2 h-4 w-4" />
+                  Contact
+                </h4>
+                <div className="bg-gray-50 rounded-xl p-4 border border-gray-100">
+                   <div className="flex items-center text-gray-700 py-1">
+                      <span className="text-gray-500 w-32 text-sm">Téléphone:</span>
+                      <span className="font-medium">{viewingUser.phone || "Non renseigné"}</span>
+                   </div>
+                   <div className="flex items-start text-gray-700 py-1">
+                      <span className="text-gray-500 w-32 text-sm">Adresse:</span>
+                      <span className="font-medium flex-1">{viewingUser.address || "Non renseignée"}</span>
+                   </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          <div className="px-8 py-6 bg-gray-50/80 border-t border-gray-200 flex justify-end">
+             <Button onClick={() => setShowViewModal(false)} className="bg-white hover:bg-gray-100 text-gray-700 border-gray-300">
+                Fermer
+             </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

@@ -31,7 +31,19 @@ import {
   Bell,
   Download,
   Printer,
+  Mail,
+  Info,
+  FileText,
+  CheckCircle2,
+  X,
 } from "lucide-react"
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog"
 import { useRouter } from "next/navigation"
 import { AttributionManagementApi } from "@/api/generated/apis/attribution-management-api"
 import { PhoneManagementApi } from "@/api/generated/apis/phone-management-api"
@@ -84,6 +96,8 @@ export default function AssignerAttributionsPage() {
     total: 0,
     totalPages: 0,
   })
+  const [showViewModal, setShowViewModal] = useState(false)
+  const [viewingAttribution, setViewingAttribution] = useState<Attribution | null>(null)
   const { toast } = useToast()
   const router = useRouter()
 
@@ -467,10 +481,8 @@ export default function AssignerAttributionsPage() {
   }
 
   const handleView = (attribution: Attribution) => {
-    toast({
-      title: "Détails de l'attribution",
-      description: `Affichage des détails pour ${attribution.userName}`,
-    })
+    setViewingAttribution(attribution)
+    setShowViewModal(true)
   }
 
   const handleSaveAttribution = async (attributionData: Partial<Attribution>) => {
@@ -1066,6 +1078,18 @@ export default function AssignerAttributionsPage() {
                                 <Button
                                   size="sm"
                                   variant="outline"
+                                  title="Voir les détails"
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    handleView(attribution)
+                                  }}
+                                  className="text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+                                >
+                                  <Eye className="h-4 w-4" />
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
                                   onClick={(e) => {
                                     e.stopPropagation()
                                     handleEdit(attribution)
@@ -1123,6 +1147,150 @@ export default function AssignerAttributionsPage() {
       />
 
       <Toaster />
+      {/* Modal View Details */}
+      <Dialog open={showViewModal} onOpenChange={setShowViewModal}>
+        <DialogContent className="max-w-3xl p-0 overflow-hidden bg-white/95 backdrop-blur-xl border-gray-200 shadow-2xl">
+          <DialogHeader className="px-8 py-6 bg-gradient-to-r from-blue-600 to-indigo-700 text-white relative">
+            <div className="flex items-center justify-between">
+              <div>
+                <DialogTitle className="text-2xl font-bold flex items-center">
+                  <Info className="mr-2 h-6 w-6" />
+                  Détails de l'Attribution
+                </DialogTitle>
+                <DialogDescription className="text-blue-100 mt-1">
+                  Informations complètes sur l'attribution, l'utilisateur et le matériel
+                </DialogDescription>
+              </div>
+            </div>
+          </DialogHeader>
+
+          {viewingAttribution && (
+            <div className="px-8 py-8 space-y-8 max-h-[70vh] overflow-y-auto custom-scrollbar">
+              {/* Profile/User Section */}
+              <div className="flex items-center space-x-6 p-6 bg-blue-50/50 rounded-2xl border border-blue-100">
+                <Avatar className="h-20 w-20 border-4 border-white shadow-lg">
+                  <AvatarFallback className="bg-gradient-to-br from-blue-500 to-indigo-600 text-white text-2xl font-bold">
+                    {viewingAttribution.userName
+                      .split(" ")
+                      .map((n) => n[0])
+                      .join("")}
+                  </AvatarFallback>
+                </Avatar>
+                <div>
+                  <h3 className="text-2xl font-bold text-gray-900">{viewingAttribution.userName}</h3>
+                  <div className="flex flex-col space-y-1 mt-1">
+                    <div className="flex items-center text-gray-600">
+                      <Mail className="h-4 w-4 mr-2" />
+                      {viewingAttribution.userEmail}
+                    </div>
+                    <div className="flex items-center mt-2">
+                       {getStatusBadge(viewingAttribution.status)}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Grid Information */}
+              <div className="grid grid-cols-2 gap-8 px-2">
+                {/* General Information */}
+                <div className="space-y-4">
+                  <h4 className="text-sm font-semibold text-blue-600 uppercase tracking-wider flex items-center">
+                    <User className="mr-2 h-4 w-4" />
+                    Informations Générales
+                  </h4>
+                  <div className="space-y-3">
+                    <div className="flex items-start justify-between py-2 border-b border-gray-100">
+                      <span className="text-gray-500 text-sm">Nom:</span>
+                      <span className="font-medium text-gray-900">{viewingAttribution.userName}</span>
+                    </div>
+                    <div className="flex items-start justify-between py-2 border-b border-gray-100">
+                      <span className="text-gray-500 text-sm">ID Utilisateur:</span>
+                      <span className="font-medium text-gray-900">{viewingAttribution.userId}</span>
+                    </div>
+                    <div className="flex items-start justify-between py-2 border-b border-gray-100">
+                      <span className="text-gray-500 text-sm">Téléphone:</span>
+                      <span className="font-medium text-gray-900 flex items-center">
+                        <Phone className="h-3 w-3 mr-1 text-blue-500" />
+                        {viewingAttribution.phoneModel || "Non assigné"}
+                      </span>
+                    </div>
+                    <div className="flex items-start justify-between py-2 border-b border-gray-100">
+                      <span className="text-gray-500 text-sm">ID Téléphone:</span>
+                      <span className="font-medium text-gray-900">{viewingAttribution.phoneId || "-"}</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Other Information */}
+                <div className="space-y-4">
+                  <h4 className="text-sm font-semibold text-blue-600 uppercase tracking-wider flex items-center">
+                    <CreditCard className="mr-2 h-4 w-4" />
+                    Détails Matériel & Dates
+                  </h4>
+                  <div className="space-y-3">
+                    <div className="flex items-start justify-between py-2 border-b border-gray-100">
+                      <span className="text-gray-500 text-sm">N° Carte SIM:</span>
+                      <span className="font-medium text-gray-900 font-mono italic">
+                        {viewingAttribution.simCardNumber || "Non assignée"}
+                      </span>
+                    </div>
+                    <div className="flex items-start justify-between py-2 border-b border-gray-100">
+                      <span className="text-gray-500 text-sm">Date d'Attribution:</span>
+                      <span className="font-medium text-gray-900 flex items-center">
+                        <Calendar className="h-3 w-3 mr-1 text-gray-400" />
+                        {new Date(viewingAttribution.assignmentDate).toLocaleDateString("fr-FR")}
+                      </span>
+                    </div>
+                    <div className="flex items-start justify-between py-2 border-b border-gray-100">
+                      <span className="text-gray-500 text-sm">Date de Retour:</span>
+                      <span className="font-medium text-gray-900">
+                        {viewingAttribution.returnDate ? new Date(viewingAttribution.returnDate).toLocaleDateString("fr-FR") : "-"}
+                      </span>
+                    </div>
+                    <div className="flex items-start justify-between py-2 border-b border-gray-100">
+                      <span className="text-gray-500 text-sm">Assigné par:</span>
+                      <span className="font-medium text-gray-900">{viewingAttribution.assignedBy}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Activity/Notes Section */}
+              <div className="space-y-4 pt-4 border-t border-gray-100">
+                <h4 className="text-sm font-semibold text-gray-900 uppercase tracking-wider flex items-center">
+                  <FileText className="mr-2 h-4 w-4" />
+                  Notes & Activité
+                </h4>
+                <div className="bg-gray-50 rounded-xl p-4 border border-gray-100 min-h-[100px]">
+                  {viewingAttribution.notes ? (
+                    <p className="text-gray-700 text-sm leading-relaxed whitespace-pre-wrap">
+                      {viewingAttribution.notes}
+                    </p>
+                  ) : (
+                    <div className="flex flex-col items-center justify-center h-full text-gray-400">
+                      <FileText className="h-8 w-8 mb-2 opacity-20" />
+                      <p className="text-xs uppercase font-medium tracking-tighter">Aucune note pour cette attribution</p>
+                    </div>
+                  )}
+                </div>
+                
+                {viewingAttribution.status === "RETURNED" && (
+                  <div className="flex items-center p-3 bg-green-50 text-green-700 rounded-lg border border-green-100 text-sm">
+                    <CheckCircle2 className="h-4 w-4 mr-2" />
+                    L'équipement a été retourné avec succès.
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          <div className="px-8 py-6 bg-gray-50/80 border-t border-gray-200 flex justify-end">
+             <Button onClick={() => setShowViewModal(false)} className="bg-white hover:bg-gray-100 text-gray-700 border-gray-300">
+                Fermer
+             </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

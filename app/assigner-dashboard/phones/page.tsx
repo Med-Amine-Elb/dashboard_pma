@@ -6,8 +6,15 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
-import { Search, Bell, Globe, Phone, User, Eye, ChevronLeft, ChevronRight, Download, History, Smartphone, Plus } from "lucide-react"
+import { Search, Bell, Globe, Phone, User, Eye, ChevronLeft, ChevronRight, Download, History, Smartphone, Plus, Mail, Info, FileText, CheckCircle2, X, CreditCard, Calendar, Smartphone as PhoneIcon } from "lucide-react"
 import { Pagination, PaginationContent, PaginationItem, PaginationLink, PaginationNext, PaginationPrevious } from "@/components/ui/pagination"
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog"
 import { Sidebar } from "@/components/sidebar"
 import { DataTable } from "@/components/data-table"
 import { useToast } from "@/hooks/use-toast"
@@ -77,6 +84,8 @@ export default function AssignerPhonesPage() {
   const { toast } = useToast()
   const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false)
   const [selectedPhoneHistory, setSelectedPhoneHistory] = useState<AssignmentHistoryItem[]>([])
+  const [showViewModal, setShowViewModal] = useState(false)
+  const [viewingPhone, setViewingPhone] = useState<PhoneDevice | null>(null)
 
   useEffect(() => {
     // Check authentication
@@ -177,7 +186,7 @@ export default function AssignerPhonesPage() {
          model: phone.model || "",
          brand: phone.brand || "",
          imei: phone.imei || "",
-         serialNumber: phone.imei || "", // Using IMEI as serial number for now
+         serialNumber: phone.serialNumber || "",
          status: mapStatusToFrontend(phone.status),
          assignedTo: phone.assignedToName || undefined,
          assignedDate: phone.assignedDate || undefined,
@@ -322,6 +331,11 @@ export default function AssignerPhonesPage() {
   const handleLogout = () => {
     localStorage.clear()
     window.location.href = "/"
+  }
+
+  const handleView = (phone: PhoneDevice) => {
+    setViewingPhone(phone)
+    setShowViewModal(true)
   }
 
   const phoneColumns = [
@@ -784,6 +798,18 @@ export default function AssignerPhonesPage() {
                         if (key === "actions") {
                           return (
                             <div className="flex items-center space-x-2">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                title="Voir les détails"
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  handleView(phone)
+                                }}
+                                className="text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+                              >
+                                <Eye className="h-4 w-4" />
+                              </Button>
                               <Button size="sm" variant="outline" onClick={async (e) => {
                                 e.stopPropagation()
                                 try {
@@ -859,6 +885,143 @@ export default function AssignerPhonesPage() {
         onClose={() => setIsHistoryModalOpen(false)}
         history={selectedPhoneHistory}
       />
+      {/* Modal View Details */}
+      <Dialog open={showViewModal} onOpenChange={setShowViewModal}>
+        <DialogContent className="max-w-3xl p-0 overflow-hidden bg-white/95 backdrop-blur-xl border-gray-200 shadow-2xl">
+          <DialogHeader className="px-8 py-6 bg-gradient-to-r from-emerald-600 to-teal-700 text-white relative">
+            <div className="flex items-center justify-between">
+              <div>
+                <DialogTitle className="text-2xl font-bold flex items-center">
+                  <Smartphone className="mr-2 h-6 w-6" />
+                  Détails du Téléphone
+                </DialogTitle>
+                <DialogDescription className="text-emerald-100 mt-1">
+                  Informations techniques et état du matériel
+                </DialogDescription>
+              </div>
+            </div>
+          </DialogHeader>
+
+          {viewingPhone && (
+            <div className="px-8 py-8 space-y-8 max-h-[70vh] overflow-y-auto custom-scrollbar">
+              {/* Device Header Section */}
+              <div className="flex items-center space-x-6 p-6 bg-emerald-50/50 rounded-2xl border border-emerald-100">
+                <div className="h-20 w-20 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-2xl flex items-center justify-center shadow-lg border-4 border-white">
+                  <Smartphone className="h-10 w-10 text-white" />
+                </div>
+                <div>
+                  <h3 className="text-2xl font-bold text-gray-900">{viewingPhone.model}</h3>
+                  <p className="text-gray-500 font-medium">{viewingPhone.brand}</p>
+                  <div className="flex items-center mt-2 space-x-2">
+                     <Badge className={getStatusColor(viewingPhone.status)}>{viewingPhone.status}</Badge>
+                     <Badge className={getConditionColor(viewingPhone.condition)}>{viewingPhone.condition}</Badge>
+                  </div>
+                </div>
+              </div>
+
+              {/* Grid Information */}
+              <div className="grid grid-cols-2 gap-8 px-2">
+                {/* Technical Information */}
+                <div className="space-y-4">
+                  <h4 className="text-sm font-semibold text-emerald-600 uppercase tracking-wider flex items-center">
+                    <Info className="mr-2 h-4 w-4" />
+                    Spécifications Techniques
+                  </h4>
+                  <div className="space-y-3">
+                    <div className="flex items-start justify-between py-2 border-b border-gray-100">
+                      <span className="text-gray-500 text-sm">IMEI:</span>
+                      <span className="font-medium text-gray-900 font-mono tracking-tighter">{viewingPhone.imei}</span>
+                    </div>
+                    <div className="flex items-start justify-between py-2 border-b border-gray-100">
+                      <span className="text-gray-500 text-sm">N° de Série:</span>
+                      <span className="font-medium text-gray-900 font-mono">{viewingPhone.serialNumber}</span>
+                    </div>
+                    <div className="flex items-start justify-between py-2 border-b border-gray-100">
+                      <span className="text-gray-500 text-sm">Stockage:</span>
+                      <span className="font-medium text-gray-900">{viewingPhone.storage}</span>
+                    </div>
+                    <div className="flex items-start justify-between py-2 border-b border-gray-100">
+                      <span className="text-gray-500 text-sm">Couleur:</span>
+                      <span className="font-medium text-gray-900">{viewingPhone.color}</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Purchase & Warranty */}
+                <div className="space-y-4">
+                  <h4 className="text-sm font-semibold text-emerald-600 uppercase tracking-wider flex items-center">
+                    <Calendar className="mr-2 h-4 w-4" />
+                    Achat & Garantie
+                  </h4>
+                  <div className="space-y-3">
+                    <div className="flex items-start justify-between py-2 border-b border-gray-100">
+                      <span className="text-gray-500 text-sm">Date d'achat:</span>
+                      <span className="font-medium text-gray-900">
+                        {new Date(viewingPhone.purchaseDate).toLocaleDateString("fr-FR")}
+                      </span>
+                    </div>
+                    <div className="flex items-start justify-between py-2 border-b border-gray-100">
+                      <span className="text-gray-500 text-sm">Fin de Garantie:</span>
+                      <span className="font-medium text-gray-900">
+                        {new Date(viewingPhone.warrantyExpiry).toLocaleDateString("fr-FR")}
+                      </span>
+                    </div>
+                    <div className="flex items-start justify-between py-2 border-b border-gray-100">
+                      <span className="text-gray-500 text-sm">Prix d'acquisition:</span>
+                      <span className="font-medium text-gray-900">{viewingPhone.price.toLocaleString()} MAD</span>
+                    </div>
+                    <div className="flex items-start justify-between py-2 border-b border-gray-100">
+                      <span className="text-gray-500 text-sm">Assigné à:</span>
+                      <span className="font-medium text-gray-900 flex items-center text-blue-600">
+                        {viewingPhone.assignedTo ? (
+                          <>
+                            <User className="h-3 w-3 mr-1" />
+                            {viewingPhone.assignedTo}
+                          </>
+                        ) : "-"}
+                      </span>
+                    </div>
+                    {viewingPhone.assignedDate && (
+                      <div className="flex items-start justify-between py-2 border-b border-gray-100">
+                        <span className="text-gray-500 text-sm">Date d'attribution:</span>
+                        <span className="font-medium text-gray-900">
+                          {new Date(viewingPhone.assignedDate).toLocaleDateString("fr-FR")}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Notes Section */}
+              <div className="space-y-4 pt-4 border-t border-gray-100">
+                <h4 className="text-sm font-semibold text-gray-900 uppercase tracking-wider flex items-center">
+                  <FileText className="mr-2 h-4 w-4" />
+                  Notes & Observations
+                </h4>
+                <div className="bg-gray-50 rounded-xl p-4 border border-gray-100 min-h-[100px]">
+                  {viewingPhone.notes ? (
+                    <p className="text-gray-700 text-sm leading-relaxed">
+                      {viewingPhone.notes}
+                    </p>
+                  ) : (
+                    <div className="flex flex-col items-center justify-center h-full text-gray-400">
+                      <FileText className="h-8 w-8 mb-2 opacity-20" />
+                      <p className="text-xs uppercase font-medium tracking-tighter">Aucune note pour ce matériel</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          <div className="px-8 py-6 bg-gray-50/80 border-t border-gray-200 flex justify-end">
+             <Button onClick={() => setShowViewModal(false)} className="bg-white hover:bg-gray-100 text-gray-700 border-gray-300">
+                Fermer
+             </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
