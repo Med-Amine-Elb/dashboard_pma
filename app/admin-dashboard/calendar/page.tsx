@@ -11,6 +11,7 @@ import { Search, Bell, Globe, Plus, CalendarIcon, Clock, User, ChevronLeft, Chev
 import { Sidebar } from "@/components/sidebar"
 import { EventModal } from "@/components/event-modal"
 import { useToast } from "@/hooks/use-toast"
+import { useSidebar } from "@/contexts/SidebarContext"
 import { CalendarEventControllerApi } from "@/api/generated/apis/calendar-event-controller-api";
 import { getApiConfig } from "@/lib/apiClient"
 import { useUser } from "@/contexts/UserContext"
@@ -26,6 +27,7 @@ interface CalendarEvent {
 }
 
 export default function CalendarPage() {
+  const { isCollapsed } = useSidebar()
   const { userData } = useUser()
   const [user, setUser] = useState({ name: "", email: "", avatar: "" })
   const [events, setEvents] = useState<CalendarEvent[]>([])
@@ -238,7 +240,7 @@ export default function CalendarPage() {
       <div className="flex">
         <Sidebar activeItem="calendar" onLogout={handleLogout} />
 
-        <div className="flex-1 ml-64 min-h-screen overflow-auto">
+        <div className={`flex-1 transition-all duration-300 ${isCollapsed ? "ml-16" : "ml-64"} min-h-screen overflow-auto`}>
           {/* Header */}
           <div className="bg-white/80 backdrop-blur-xl border-b border-gray-200 px-4 sm:px-6 py-4 sticky top-0 z-40">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">

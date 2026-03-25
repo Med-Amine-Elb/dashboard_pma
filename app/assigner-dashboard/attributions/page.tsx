@@ -52,6 +52,7 @@ import { SIMCardManagementApi } from "@/api/generated/apis/simcard-management-ap
 import { UserManagementApi } from "@/api/generated/apis/user-management-api"
 import { getApiConfig } from "@/lib/apiClient"
 import { useUser } from "@/contexts/UserContext"
+import { useSidebar } from "@/contexts/SidebarContext"
 import { AttributionDto } from "@/api/generated/models"
 import axios from "axios"
 import ExcelJS from 'exceljs'
@@ -81,6 +82,7 @@ interface PaginationInfo {
 }
 
 export default function AssignerAttributionsPage() {
+  const { isCollapsed } = useSidebar()
   const { userData } = useUser()
   const [attributions, setAttributions] = useState<Attribution[]>([])
   const [filteredAttributions, setFilteredAttributions] = useState<Attribution[]>([])
@@ -791,7 +793,7 @@ export default function AssignerAttributionsPage() {
     <div className="flex min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100">
       <Sidebar activeItem="attributions" onLogout={handleLogout} />
 
-      <div className="flex-1 ml-64">
+      <div className={`flex-1 transition-all duration-300 ${isCollapsed ? "ml-16" : "ml-64"}`}>
         {/* Header Bar */}
         <div className="bg-white/80 backdrop-blur-xl border-b border-gray-200 px-6 py-4">
           <div className="flex items-center justify-between">

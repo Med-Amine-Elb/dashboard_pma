@@ -24,6 +24,7 @@ import { AttributionManagementApi } from "@/api/generated/apis/attribution-manag
 import { SIMCardManagementApi } from "@/api/generated/apis/simcard-management-api"
 import { getApiConfig } from "@/lib/apiClient"
 import { useUser } from "@/contexts/UserContext"
+import { useSidebar } from "@/contexts/SidebarContext"
 import { UserDto } from "@/api/generated/models"
 import { NotificationsDropdown } from "@/components/notifications-dropdown"
 import ExcelJS from 'exceljs'
@@ -107,6 +108,7 @@ const fetcher = async () => {
 }
 
 export default function AssignerUsersPage() {
+  const { isCollapsed } = useSidebar()
   const { userData } = useUser()
   const { toast } = useToast()
   const [searchTerm, setSearchTerm] = useState("")
@@ -489,7 +491,7 @@ export default function AssignerUsersPage() {
       <div className="flex">
         <Sidebar activeItem="users" onLogout={handleLogout} />
 
-        <div className="flex-1 ml-64">
+        <div className={`flex-1 transition-all duration-300 ${isCollapsed ? "ml-16" : "ml-64"}`}>
           {/* Header */}
           <div className="bg-white/80 backdrop-blur-xl border-b border-gray-200 px-6 py-4">
             <div className="flex items-center justify-between">

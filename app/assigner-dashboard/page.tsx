@@ -49,6 +49,7 @@ import dynamic from "next/dynamic"
 import { AttributionManagementApi, UserManagementApi, PhoneManagementApi, SIMCardManagementApi } from "@/api/generated"
 import { getApiConfig } from "@/lib/apiClient"
 import { useUser } from "@/contexts/UserContext"
+import { useSidebar } from "@/contexts/SidebarContext"
 import { clearAuthCookies } from "@/lib/authCookies"
 import { NotificationsDropdown } from "@/components/notifications-dropdown"
 import { DashboardHeader } from "@/components/dashboard-header"
@@ -131,6 +132,7 @@ const fetcher = async () => {
 }
 
 export default function AssignerDashboard() {
+  const { isCollapsed } = useSidebar()
   const { userData } = useUser()
   const [showAttributionModal, setShowAttributionModal] = useState(false)
   const [showProjectDetails, setShowProjectDetails] = useState(false)
@@ -465,7 +467,7 @@ export default function AssignerDashboard() {
       <Sidebar activeItem="board" onLogout={handleLogout} />
 
              {/* Main Content */}
-        <div className="flex-1 ml-64 p-0">
+        <div className={`flex-1 transition-all duration-300 ${isCollapsed ? "ml-16" : "ml-64"} p-0`}>
           <DashboardHeader 
             title={`Bienvenue, ${userData?.firstName || 'Utilisateur'}`}
             description="Tableau de bord de gestion des attributions"

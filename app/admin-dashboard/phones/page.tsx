@@ -12,6 +12,7 @@ import { Sidebar } from "@/components/sidebar"
 import { DataTable } from "@/components/data-table"
 import { PhoneModal } from "@/components/phone-modal"
 import { useToast } from "@/hooks/use-toast"
+import { useSidebar } from "@/contexts/SidebarContext"
 import { PhoneManagementApi } from "@/api/generated/apis/phone-management-api";
 import { getApiConfig } from "@/lib/apiClient";
 import { useUser } from "@/contexts/UserContext";
@@ -54,6 +55,7 @@ interface PhoneDtoCustom {
 }
 
 export default function PhonesPage() {
+  const { isCollapsed } = useSidebar()
   const { userData } = useUser()
   const [user, setUser] = useState({ name: "", email: "", avatar: "" })
   const [phones, setPhones] = useState<PhoneData[]>([])
@@ -740,7 +742,7 @@ export default function PhonesPage() {
       <div className="flex">
         <Sidebar activeItem="phones" onLogout={handleLogout} />
 
-        <div className="flex-1 ml-64">
+        <div className={`flex-1 transition-all duration-300 ${isCollapsed ? "ml-16" : "ml-64"}`}>
           {/* Header */}
           <div className="bg-white/80 backdrop-blur-xl border-b border-gray-200 px-6 py-4">
             <div className="flex items-center justify-between">

@@ -12,6 +12,7 @@ import { Sidebar } from "@/components/sidebar"
 import { DataTable } from "@/components/data-table"
 import { UserModal } from "@/components/user-modal"
 import { useToast } from "@/hooks/use-toast"
+import { useSidebar } from "@/contexts/SidebarContext"
 import { UserManagementApi } from "@/api/generated/apis/user-management-api";
 import { UserDtoRoleEnum } from "@/api/generated/models/user-dto";
 import { UserDtoStatusEnum } from "@/api/generated/models/user-dto";
@@ -53,6 +54,7 @@ type ModalUser = {
 }
 
 export default function UsersPage() {
+  const { isCollapsed } = useSidebar()
   const { userData } = useUser()
   const [user, setUser] = useState({ name: "", email: "", avatar: "" })
   const [users, setUsers] = useState<User[]>([])
@@ -711,7 +713,7 @@ export default function UsersPage() {
       <div className="flex">
         <Sidebar activeItem="users" onLogout={handleLogout} />
 
-        <div className="flex-1 ml-64">
+        <div className={`flex-1 transition-all duration-300 ${isCollapsed ? "ml-16" : "ml-64"}`}>
           {/* Header */}
           <div className="bg-white/80 backdrop-blur-xl border-b border-gray-200 px-6 py-4">
             <div className="flex items-center justify-between">

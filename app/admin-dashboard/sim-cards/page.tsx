@@ -13,6 +13,7 @@ import { DataTable } from "@/components/data-table"
 import { SimCardModal } from "@/components/sim-card-modal"
 import { AssignmentHistoryModal } from "@/components/assignment-history-modal"
 import { useToast } from "@/hooks/use-toast"
+import { useSidebar } from "@/contexts/SidebarContext"
 import { SIMCardManagementApi } from "@/api/generated/apis/simcard-management-api";
 import { AssignmentHistoryApi } from "@/api/generated/apis/assignment-history-api"
 import { UserManagementApi } from "@/api/generated/apis/user-management-api"
@@ -51,6 +52,7 @@ interface AssignmentHistory {
 }
 
 export default function SimCardsPage() {
+  const { isCollapsed } = useSidebar()
   const { userData } = useUser()
   const [user, setUser] = useState({ name: "", email: "", avatar: "" })
   const [simCards, setSimCards] = useState<SimCard[]>([])
@@ -745,7 +747,7 @@ export default function SimCardsPage() {
       <div className="flex">
         <Sidebar activeItem="sim-cards" onLogout={handleLogout} />
 
-        <div className="flex-1 ml-64">
+        <div className={`flex-1 transition-all duration-300 ${isCollapsed ? "ml-16" : "ml-64"}`}>
           {/* Header */}
           <div className="bg-white/80 backdrop-blur-xl border-b border-gray-200 px-6 py-4">
             <div className="flex items-center justify-between">

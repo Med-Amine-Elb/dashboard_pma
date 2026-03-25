@@ -25,6 +25,7 @@ import { AssignmentHistoryApi } from "@/api/generated/apis/assignment-history-ap
 import { UserManagementApi } from "@/api/generated/apis/user-management-api"
 import { getApiConfig } from "@/lib/apiClient"
 import { useUser } from "@/contexts/UserContext"
+import { useSidebar } from "@/contexts/SidebarContext"
 import { SimCardDto } from "@/api/generated/models"
 import { NotificationsDropdown } from "@/components/notifications-dropdown"
 import axios from "axios"
@@ -68,6 +69,7 @@ interface PaginationInfo {
 }
 
 export default function SimAssignmentsPage() {
+  const { isCollapsed } = useSidebar()
   const { userData } = useUser()
   const [user, setUser] = useState({ name: "", email: "", avatar: "" })
   const [simCards, setSimCards] = useState<SimCard[]>([])
@@ -803,7 +805,7 @@ export default function SimAssignmentsPage() {
       <div className="flex">
         <Sidebar activeItem="sim-assignments" onLogout={handleLogout} />
 
-        <div className="flex-1 ml-64">
+        <div className={`flex-1 transition-all duration-300 ${isCollapsed ? "ml-16" : "ml-64"}`}>
           {/* Header */}
           <div className="bg-white/80 backdrop-blur-xl border-b border-gray-200 px-6 py-4">
             <div className="flex items-center justify-between">

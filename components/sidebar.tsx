@@ -21,6 +21,7 @@ import {
 } from "lucide-react"
 import Link from "next/link"
 import { useUser } from "@/contexts/UserContext"
+import { useSidebar } from "@/contexts/SidebarContext"
 
 interface SidebarProps {
   activeItem: string
@@ -28,7 +29,7 @@ interface SidebarProps {
 }
 
 export function Sidebar({ activeItem, onLogout }: SidebarProps) {
-  const [isCollapsed, setIsCollapsed] = useState(false)
+  const { isCollapsed, toggleSidebar } = useSidebar()
   const { userData, loading } = useUser()
 
   // Get user role to show appropriate menu items
@@ -100,7 +101,7 @@ export function Sidebar({ activeItem, onLogout }: SidebarProps) {
         <Button
           variant="ghost"
           size="sm"
-          onClick={() => setIsCollapsed(!isCollapsed)}
+          onClick={toggleSidebar}
           className="text-white hover:bg-white/10"
         >
           {isCollapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}

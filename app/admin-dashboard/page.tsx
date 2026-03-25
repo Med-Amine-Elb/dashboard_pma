@@ -30,6 +30,7 @@ import { TaskCard } from "@/components/task-card"
 import { PhoneModal } from "@/components/phone-modal"
 import { DashboardHeader } from "@/components/dashboard-header"
 import { useToast } from "@/hooks/use-toast"
+import { useSidebar } from "@/contexts/SidebarContext"
 
 // Dynamically import ECharts to avoid SSR issues
 const ReactECharts = dynamic(() => import("echarts-for-react"), { ssr: false })
@@ -74,6 +75,7 @@ const fetcher = async () => {
 }
 
 export default function AdminDashboard() {
+  const { isCollapsed } = useSidebar()
   const { userData } = useUser()
   const [isPhoneModalOpen, setIsPhoneModalOpen] = useState(false)
   const [searchTerm, setSearchTerm] = useState("")
@@ -366,7 +368,7 @@ export default function AdminDashboard() {
         <Sidebar activeItem="analytics" onLogout={handleLogout} />
 
         {/* Main Content */}
-        <div className="flex-1 ml-64">
+        <div className={`flex-1 transition-all duration-300 ${isCollapsed ? "ml-16" : "ml-64"}`}>
           <DashboardHeader
             title="Analytics - Gestion des Téléphones"
             description="Vue d'ensemble du parc téléphonique d'entreprise"

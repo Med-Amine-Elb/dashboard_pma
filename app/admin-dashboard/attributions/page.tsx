@@ -13,6 +13,7 @@ import { Sidebar } from "@/components/sidebar"
 import { DataTable } from "@/components/data-table"
 import { AttributionModal } from "@/components/attribution-modal"
 import { useToast } from "@/hooks/use-toast"
+import { useSidebar } from "@/contexts/SidebarContext"
 import { AttributionManagementApi } from "@/api/generated/apis/attribution-management-api";
 import { PhoneManagementApi } from "@/api/generated/apis/phone-management-api"
 import { UserManagementApi } from "@/api/generated/apis/user-management-api"
@@ -45,6 +46,7 @@ interface Attribution {
 }
 
 export default function AttributionsPage() {
+  const { isCollapsed } = useSidebar()
   const { userData } = useUser()
   const [user, setUser] = useState({ name: "", email: "", avatar: "" })
   const [attributions, setAttributions] = useState<Attribution[]>([])
@@ -730,7 +732,7 @@ export default function AttributionsPage() {
       <div className="flex">
         <Sidebar activeItem="attributions" onLogout={handleLogout} />
 
-        <div className="flex-1 ml-64">
+        <div className={`flex-1 transition-all duration-300 ${isCollapsed ? "ml-16" : "ml-64"}`}>
           {/* Header */}
           <div className="bg-white/80 backdrop-blur-xl border-b border-gray-200 px-6 py-4">
             <div className="flex items-center justify-between">

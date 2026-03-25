@@ -2,6 +2,7 @@
 
 import { UserProvider } from "@/contexts/UserContext"
 import { NotificationsProvider } from "@/contexts/NotificationsContext"
+import { SidebarProvider } from "@/contexts/SidebarContext"
 import { ReactNode } from "react"
 
 interface ProvidersProps {
@@ -11,9 +12,11 @@ interface ProvidersProps {
 export function Providers({ children }: ProvidersProps) {
   return (
     <UserProvider>
-      <NotificationsProvider>
-        {children}
-      </NotificationsProvider>
+      <SidebarProvider>
+        <NotificationsProvider>
+          {children}
+        </NotificationsProvider>
+      </SidebarProvider>
     </UserProvider>
   )
 }

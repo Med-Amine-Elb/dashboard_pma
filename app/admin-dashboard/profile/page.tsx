@@ -11,6 +11,7 @@ import { Separator } from "@/components/ui/separator"
 import { Bell, Globe, Camera, Save, Edit, Activity, Users, Smartphone, CreditCard } from "lucide-react"
 import { Sidebar } from "@/components/sidebar"
 import { useToast } from "@/hooks/use-toast"
+import { useSidebar } from "@/contexts/SidebarContext"
 import { useUser } from "@/contexts/UserContext"
 import { AttributionManagementApi } from "@/api/generated/apis/attribution-management-api"
 import { PhoneManagementApi } from "@/api/generated/apis/phone-management-api"
@@ -46,6 +47,7 @@ interface RecentActivity {
 }
 
 export default function ProfilePage() {
+  const { isCollapsed } = useSidebar()
   const { userData } = useUser()
   const [user, setUser] = useState<UserProfile>({
     id: "1",
@@ -276,7 +278,7 @@ export default function ProfilePage() {
       <div className="flex">
         <Sidebar activeItem="profile" onLogout={handleLogout} />
 
-        <div className="flex-1 lg:ml-64">
+        <div className={`flex-1 transition-all duration-300 ${isCollapsed ? "ml-16" : "ml-64"}`}>
           {/* Header */}
           <div className="bg-white/80 backdrop-blur-xl border-b border-gray-200 px-6 py-4">
             <div className="flex items-center justify-between">
