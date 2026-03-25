@@ -46,7 +46,8 @@ export default function MyPhonePage() {
       model?: string
       brand?: string
       serialNumber?: string
-      imei?: string
+      imei1?: string
+      imei2?: string
       color?: string
       storage?: string
       condition?: string
@@ -81,7 +82,8 @@ export default function MyPhonePage() {
     model: "",
     brand: "",
     serialNumber: "",
-    imei: "",
+    imei1: "",
+    imei2: "",
     color: "",
     storage: "",
     assignedDate: "",
@@ -179,7 +181,8 @@ export default function MyPhonePage() {
           model: p.model || "",
           brand: p.brand || "",
           serialNumber: p.serialNumber || "",
-          imei: p.imei || "",
+          imei1: p.imei1 || (p as any).imei || "",
+          imei2: p.imei2 || "",
           color: p.color || "",
           storage: p.storage || "",
           condition: p.condition || "",
@@ -203,7 +206,8 @@ export default function MyPhonePage() {
           model: "",
           brand: "",
           serialNumber: "",
-          imei: "",
+          imei1: "",
+          imei2: "",
           color: "",
           storage: "",
           condition: "",
@@ -396,9 +400,15 @@ export default function MyPhonePage() {
                         <p className="text-gray-900 font-mono">{phoneDetails.serialNumber}</p>
                       </div>
                       <div>
-                        <p className="text-sm font-medium text-gray-600">IMEI</p>
-                        <p className="text-gray-900 font-mono">{phoneDetails.imei}</p>
+                        <p className="text-sm font-medium text-gray-600">IMEI 1</p>
+                        <p className="text-gray-900 font-mono">{phoneDetails.imei1}</p>
                       </div>
+                      {phoneDetails.imei2 && (
+                        <div>
+                          <p className="text-sm font-medium text-gray-600">IMEI 2</p>
+                          <p className="text-gray-900 font-mono">{phoneDetails.imei2}</p>
+                        </div>
+                      )}
                       <div>
                         <p className="text-sm font-medium text-gray-600">Version iOS</p>
                         <p className="text-gray-900">{phoneDetails.osVersion}</p>

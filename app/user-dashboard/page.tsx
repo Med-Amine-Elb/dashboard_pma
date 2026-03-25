@@ -44,7 +44,8 @@ export default function UserDashboard() {
     phone?: {
       model?: string
       serialNumber?: string
-      imei?: string
+      imei1?: string
+      imei2?: string
       assignedDate?: string
       status?: string
       batteryHealth?: number
@@ -78,7 +79,8 @@ export default function UserDashboard() {
   const [currentPhone, setCurrentPhone] = useState({
     model: "",
     serialNumber: "",
-    imei: "",
+    imei1: "",
+    imei2: "",
     assignedDate: "",
     status: "",
     batteryHealth: 0,
@@ -132,7 +134,8 @@ export default function UserDashboard() {
         setCurrentPhone({
           model: phoneData.model || "",
           serialNumber: phoneData.serialNumber || "",
-          imei: phoneData.imei || "",
+          imei1: phoneData.imei1 || (phoneData as any).imei || "",
+          imei2: phoneData.imei2 || "",
           assignedDate: phoneData.assignedDate
             ? new Date(phoneData.assignedDate).toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" })
             : "",
@@ -147,7 +150,8 @@ export default function UserDashboard() {
         setCurrentPhone({
           model: "",
           serialNumber: "",
-          imei: "",
+          imei1: "",
+          imei2: "",
           assignedDate: "",
           status: "Non assigné",
           batteryHealth: 0,

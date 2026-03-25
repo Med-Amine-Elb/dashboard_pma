@@ -24,7 +24,8 @@ interface Phone {
   condition: "EXCELLENT" | "GOOD" | "FAIR" | "POOR"
   serialNumber: string
   price: number
-  imei: string
+  imei1: string
+  imei2?: string
   storage: string
   color: string
   notes?: string
@@ -40,7 +41,8 @@ interface PhoneModalProps {
 interface FormData {
   model: string
   brand: string
-  imei: string
+  imei1: string
+  imei2: string
   serialNumber: string
   status: "AVAILABLE" | "ASSIGNED" | "LOST" | "DAMAGED"
   condition: "EXCELLENT" | "GOOD" | "FAIR" | "POOR"
@@ -57,7 +59,8 @@ export function PhoneModal({ isOpen, onClose, onSave, phone }: PhoneModalProps) 
   const [formData, setFormData] = useState<FormData>({
     model: "",
     brand: "",
-    imei: "",
+    imei1: "",
+    imei2: "",
     serialNumber: "",
     status: "AVAILABLE",
     condition: "EXCELLENT",
@@ -153,7 +156,8 @@ export function PhoneModal({ isOpen, onClose, onSave, phone }: PhoneModalProps) 
       setFormData({
         model: phone.model,
         brand: phone.brand,
-        imei: phone.imei,
+        imei1: phone.imei1 || "",
+        imei2: phone.imei2 || "",
         serialNumber: phone.serialNumber || "",
         status: phone.status,
         condition: phone.condition,
@@ -171,7 +175,8 @@ export function PhoneModal({ isOpen, onClose, onSave, phone }: PhoneModalProps) 
       setFormData({
         model: "",
         brand: "",
-        imei: "",
+        imei1: "",
+        imei2: "",
         serialNumber: "",
         status: "AVAILABLE",
         condition: "EXCELLENT",
@@ -193,7 +198,8 @@ export function PhoneModal({ isOpen, onClose, onSave, phone }: PhoneModalProps) 
     let dataToSave: Partial<Phone> = { 
       model: formData.model,
       brand: formData.brand,
-      imei: formData.imei,
+      imei1: formData.imei1,
+      imei2: formData.imei2,
       serialNumber: formData.serialNumber,
       status: formData.status,
       condition: formData.condition,
@@ -294,15 +300,27 @@ export function PhoneModal({ isOpen, onClose, onSave, phone }: PhoneModalProps) 
 
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label htmlFor="imei">IMEI</Label>
+              <Label htmlFor="imei1">IMEI 1</Label>
               <Input
-                id="imei"
-                value={formData.imei}
-                onChange={(e) => setFormData({ ...formData, imei: e.target.value })}
+                id="imei1"
+                value={formData.imei1}
+                onChange={(e) => setFormData({ ...formData, imei1: e.target.value })}
                 placeholder="ex: 123456789012345"
                 required
               />
             </div>
+            <div className="space-y-2">
+              <Label htmlFor="imei2">IMEI 2 (Optionnel)</Label>
+              <Input
+                id="imei2"
+                value={formData.imei2}
+                onChange={(e) => setFormData({ ...formData, imei2: e.target.value })}
+                placeholder="ex: 123456789012346"
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 gap-4">
             <div className="space-y-2">
               <Label htmlFor="serialNumber">Numéro de série</Label>
               <Input

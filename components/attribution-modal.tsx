@@ -115,7 +115,7 @@ export function AttributionModal({ isOpen, onClose, onSave, attribution }: Attri
 
         const apiUsers = (usersRes.data as any).users || (usersRes.data as any).data?.users || (Array.isArray(usersRes.data) ? usersRes.data : [])
         const apiPhones = (phonesRes.data as any).phones || (phonesRes.data as any).data?.phones || (Array.isArray(phonesRes.data) ? phonesRes.data : [])
-        const apiSims = (simsRes.data as any).simcards || (simsRes.data as any).simCards || (simsRes.data as any).data?.simCards || (Array.isArray(simsRes.data) ? simsRes.data : [])
+        const apiSims = (simsRes.data as any).simcards || (simsRes.data as any).simCards || (simsRes.data as any).data?.simcards || (simsRes.data as any).data?.simCards || (Array.isArray(simsRes.data) ? simsRes.data : [])
         const apiAttributions = (attributionsRes.data as any).attributions || (attributionsRes.data as any).data?.attributions || (Array.isArray(attributionsRes.data) ? attributionsRes.data : [])
 
         const assignedPhoneIds = new Set<string>()
@@ -201,9 +201,18 @@ export function AttributionModal({ isOpen, onClose, onSave, attribution }: Attri
   }
 
   const filteredPhones = phones.filter((p) => {
-    if (assignedPhones.has(p.id.toString())) return false
+    // Correct status check: only show available phones, but allow currently selected phone to show
+    if (assignedPhones.has(p.id.toString()) && p.id.toString() !== formData.phoneId?.toString()) return false
+    
+    // Allow empty search to show all available
+    if (!phoneSearch.trim()) return true
+    
     const search = phoneSearch.toLowerCase()
-    return (p.model?.toLowerCase().includes(search) || p.brand?.toLowerCase().includes(search) || p.imei?.includes(search))
+    return (p.model?.toLowerCase().includes(search) || 
+            p.brand?.toLowerCase().includes(search) || 
+            p.imei1?.includes(search) || 
+            p.imei2?.includes(search) ||
+            p.serialNumber?.toLowerCase().includes(search))
   })
 
   const handlePhoneSelect = (phoneId: string) => {
@@ -218,7 +227,8 @@ export function AttributionModal({ isOpen, onClose, onSave, attribution }: Attri
           phoneId,
           phoneModel: p.model,
           phoneBrand: p.brand,
-          phoneImei: p.imei,
+          phoneImei1: p.imei1,
+          phoneImei2: p.imei2,
         }))
         setPhoneSearch(`${p.brand || ""} ${p.model || ""}`.trim())
       }
@@ -228,7 +238,10 @@ export function AttributionModal({ isOpen, onClose, onSave, attribution }: Attri
   }
 
   const filteredSims = simCards.filter((s) => {
-    if (assignedSims.has(s.id.toString())) return false
+    if (assignedSims.has(s.id.toString()) && s.id.toString() !== formData.simCardId?.toString()) return false
+    
+    if (!simSearch.trim()) return true
+    
     const search = simSearch.toLowerCase()
     return (s.number?.toLowerCase().includes(search) || s.iccid?.toLowerCase().includes(search))
   })
@@ -354,15 +367,20 @@ export function AttributionModal({ isOpen, onClose, onSave, attribution }: Attri
                     className="pl-10"
                   />
                 </div>
-                {showPhoneSuggestions && phoneSearch && (
-                  <div className="absolute z-10 bg-white border rounded-lg w-full max-h-48 overflow-y-auto shadow-lg">
-                    <div className={`px-3 py-2 hover:bg-gray-100 cursor-pointer ${selectedPhoneIndex === 0 ? "bg-blue-50" : ""}`} onMouseDown={() => handlePhoneSelect("none")}>Aucun téléphone</div>
-                    {filteredPhones.map((p, i) => (
-                      <div key={p.id} className={`px-3 py-2 hover:bg-gray-100 cursor-pointer ${i + 1 === selectedPhoneIndex ? "bg-blue-50" : ""}`} onMouseDown={() => handlePhoneSelect(p.id)}>
-                        <div className="font-medium">{p.brand} {p.model}</div>
-                        <div className="text-sm text-gray-500">{p.imei}</div>
-                      </div>
-                    ))}
+                {showPhoneSuggestions && (
+                  <div className="absolute z-10 bg-white border rounded-lg w-full max-h-48 overflow-y-auto shadow-lg mt-1">
+                    <div className={`px-3 py-2 hover:bg-gray-100 cursor-pointer text-sm text-blue-600 font-medium border-b ${selectedPhoneIndex === 0 ? "bg-blue-50" : ""}`} onMouseDown={() => handlePhoneSelect("none")}>Aucun téléphone</div>
+                    {filteredPhones.length === 0 ? (
+                      <div className="px-3 py-2 text-sm text-gray-500 italic">Aucun téléphone disponible</div>
+                    ) : (
+                      filteredPhones.map((p, i) => (
+                        <div key={p.id} className={`px-3 py-2 hover:bg-gray-100 cursor-pointer border-b last:border-0 ${i + 1 === selectedPhoneIndex ? "bg-blue-50" : ""}`} onMouseDown={() => handlePhoneSelect(p.id)}>
+                          <div className="font-medium text-sm text-gray-900">{p.brand} {p.model}</div>
+                          <div className="text-xs text-gray-500 mt-0.5">IMEI 1: {p.imei1} {p.imei2 ? `| IMEI 2: ${p.imei2}` : ''}</div>
+                          {p.serialNumber && <div className="text-xs text-gray-400">S/N: {p.serialNumber}</div>}
+                        </div>
+                      ))
+                    )}
                   </div>
                 )}
               </div>
@@ -383,14 +401,20 @@ export function AttributionModal({ isOpen, onClose, onSave, attribution }: Attri
                     className="pl-10"
                   />
                 </div>
-                {showSimSuggestions && simSearch && (
-                  <div className="absolute z-10 bg-white border rounded-lg w-full max-h-48 overflow-y-auto shadow-lg">
-                    <div className={`px-3 py-2 hover:bg-gray-100 cursor-pointer ${selectedSimIndex === 0 ? "bg-blue-50" : ""}`} onMouseDown={() => handleSimSelect("none")}>Aucune SIM</div>
-                    {filteredSims.map((s, i) => (
-                      <div key={s.id} className={`px-3 py-2 hover:bg-gray-100 cursor-pointer ${i + 1 === selectedSimIndex ? "bg-blue-50" : ""}`} onMouseDown={() => handleSimSelect(s.id)}>
-                        <div className="font-medium">{s.number}</div>
-                      </div>
-                    ))}
+                {showSimSuggestions && (
+                  <div className="absolute z-10 bg-white border rounded-lg w-full max-h-48 overflow-y-auto shadow-lg mt-1">
+                    <div className={`px-3 py-2 hover:bg-gray-100 cursor-pointer text-sm text-blue-600 font-medium border-b ${selectedSimIndex === 0 ? "bg-blue-50" : ""}`} onMouseDown={() => handleSimSelect("none")}>Aucune SIM</div>
+                    {filteredSims.length === 0 ? (
+                      <div className="px-3 py-2 text-sm text-gray-500 italic">Aucune SIM disponible</div>
+                    ) : (
+                      filteredSims.map((s, i) => (
+                        <div key={s.id} className={`px-3 py-2 hover:bg-gray-100 cursor-pointer border-b last:border-0 ${i + 1 === selectedSimIndex ? "bg-blue-50" : ""}`} onMouseDown={() => handleSimSelect(s.id)}>
+                          <div className="font-medium text-sm text-gray-900">{s.number}</div>
+                          <div className="text-xs text-gray-500 mt-0.5">ICCID: {s.iccid}</div>
+                          <div className="text-xs text-gray-400 uppercase">{s.carrier} - {s.plan}</div>
+                        </div>
+                      ))
+                    )}
                   </div>
                 )}
               </div>

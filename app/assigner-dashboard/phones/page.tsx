@@ -33,7 +33,8 @@ interface PhoneDevice {
   id: string
   model: string
   brand: string
-  imei: string
+  imei1: string
+  imei2?: string
   serialNumber: string
   status: "available" | "assigned" | "lost" | "damaged"
   assignedTo?: string
@@ -187,7 +188,8 @@ export default function AssignerPhonesPage() {
          id: phone.id?.toString() || "",
          model: phone.model || "",
          brand: phone.brand || "",
-         imei: phone.imei || "",
+         imei1: phone.imei1 || phone.imei || "",
+         imei2: phone.imei2 || undefined,
          serialNumber: phone.serialNumber || "",
          status: mapStatusToFrontend(phone.status),
          assignedTo: phone.assignedToName || undefined,
@@ -241,7 +243,8 @@ export default function AssignerPhonesPage() {
         (phone) =>
           phone.model.toLowerCase().includes(searchTerm.toLowerCase()) ||
           phone.brand.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          phone.imei.toLowerCase().includes(searchTerm.toLowerCase()),
+          phone.imei1.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          (phone.imei2 && phone.imei2.toLowerCase().includes(searchTerm.toLowerCase())),
       )
     }
 
@@ -443,7 +446,8 @@ export default function AssignerPhonesPage() {
       const exportPhones = apiPhones.map((p: any) => ({
         model: p.model ?? "",
         brand: p.brand ?? "",
-        imei: p.imei ?? "",
+        imei1: p.imei1 ?? p.imei ?? "",
+        imei2: p.imei2 ?? "",
         serialNumber: p.serialNumber ?? "",
         status: p.status ?? "",
         assignedTo: p.assignedTo ?? p.assignedToUser?.name ?? "",
@@ -931,9 +935,15 @@ export default function AssignerPhonesPage() {
                   </h4>
                   <div className="space-y-3">
                     <div className="flex items-start justify-between py-2 border-b border-gray-100">
-                      <span className="text-gray-500 text-sm">IMEI:</span>
-                      <span className="font-medium text-gray-900 font-mono tracking-tighter">{viewingPhone.imei}</span>
+                      <span className="text-gray-500 text-sm">IMEI 1:</span>
+                      <span className="font-medium text-gray-900 font-mono tracking-tighter">{viewingPhone.imei1}</span>
                     </div>
+                    {viewingPhone.imei2 && (
+                      <div className="flex items-start justify-between py-2 border-b border-gray-100">
+                        <span className="text-gray-500 text-sm">IMEI 2:</span>
+                        <span className="font-medium text-gray-900 font-mono tracking-tighter">{viewingPhone.imei2}</span>
+                      </div>
+                    )}
                     <div className="flex items-start justify-between py-2 border-b border-gray-100">
                       <span className="text-gray-500 text-sm">N° de Série:</span>
                       <span className="font-medium text-gray-900 font-mono">{viewingPhone.serialNumber}</span>

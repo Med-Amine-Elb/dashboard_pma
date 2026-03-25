@@ -8,7 +8,8 @@ export interface AttributionPrintData {
   hierarchicalManagerFunction?: string;
   phoneModel?: string;
   phoneBrand?: string;
-  phoneImei?: string;
+  phoneImei1?: string;
+  phoneImei2?: string;
   simCardNumber?: string;
   assignedBy?: string;
   assignmentDate?: string;
@@ -164,7 +165,10 @@ export function printAttributionForm(data: AttributionPrintData): void {
         <td colspan="3" class="value-cell">
           <div style="display: flex; justify-content: space-between; font-weight: bold;">
             <span>${escapeHtml(data.phoneModel || "N/A")}</span>
-            <span style="font-weight: normal;">IMEI : <span style="font-weight: bold;">${escapeHtml(data.phoneImei || "N/A")}</span></span>
+            <span style="font-weight: normal;">
+              IMEI 1: <span style="font-weight: bold;">${escapeHtml(data.phoneImei1 || "N/A")}</span>
+              ${data.phoneImei2 ? ` / <span style="font-weight: normal;">IMEI 2: </span><span style="font-weight: bold;">${escapeHtml(data.phoneImei2)}</span>` : ""}
+            </span>
           </div>
         </td>
       </tr>

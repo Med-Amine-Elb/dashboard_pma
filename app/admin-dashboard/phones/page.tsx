@@ -31,7 +31,8 @@ interface PhoneData {
   condition: "EXCELLENT" | "GOOD" | "FAIR" | "POOR"
   serialNumber: string
   price: number
-  imei: string
+  imei1: string
+  imei2?: string
   storage: string
   color: string
   notes?: string
@@ -44,12 +45,10 @@ interface PhoneData {
 interface PhoneDtoCustom {
   brand: string;
   model: string;
-  imei: string;
-  serialNumber: string;
-  status: "AVAILABLE" | "ASSIGNED" | "LOST" | "DAMAGED";
-  condition: "EXCELLENT" | "GOOD" | "FAIR" | "POOR";
   storage: string;
   color: string;
+  imei1: string;
+  imei2?: string;
   price: number;
   notes?: string;
 }
@@ -170,7 +169,8 @@ export default function PhonesPage() {
         condition: (p.condition || "GOOD").toUpperCase(),
         serialNumber: p.serialNumber || "",
         price: p.price || 0,
-        imei: p.imei || "",
+        imei1: p.imei1 || p.imei || "",
+        imei2: p.imei2 || "",
         storage: p.storage || "",
         color: p.color || "",
         notes: p.notes || "",
@@ -203,7 +203,8 @@ export default function PhonesPage() {
           phone.model.toLowerCase().includes(searchTerm.toLowerCase()) ||
           phone.brand.toLowerCase().includes(searchTerm.toLowerCase()) ||
           phone.serialNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          phone.imei.toLowerCase().includes(searchTerm.toLowerCase()),
+          phone.imei1.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          (phone.imei2 && phone.imei2.toLowerCase().includes(searchTerm.toLowerCase())),
       )
     }
 
@@ -333,10 +334,10 @@ export default function PhonesPage() {
         errors.push("La marque est obligatoire")
       }
       
-      if (!phoneData.imei || phoneData.imei.trim() === "") {
-        errors.push("L'IMEI est obligatoire")
-      } else if (phoneData.imei.length < 10) {
-        errors.push("L'IMEI doit contenir au moins 10 caractères")
+      if (!phoneData.imei1 || phoneData.imei1.trim() === "") {
+        errors.push("L'IMEI 1 est obligatoire")
+      } else if (phoneData.imei1.length < 10) {
+        errors.push("L'IMEI 1 doit contenir au moins 10 caractères")
       }
       
       if (!phoneData.serialNumber || phoneData.serialNumber.trim() === "") {
@@ -381,7 +382,8 @@ export default function PhonesPage() {
         await phoneApi.updatePhone(Number(selectedPhone.id), {
           brand: phoneData.brand || "",
           model: phoneData.model || "",
-          imei: phoneData.imei || "",
+          imei1: phoneData.imei1 || "",
+          imei2: phoneData.imei2 || "",
           serialNumber: phoneData.serialNumber || "",
           status: phoneData.status || "AVAILABLE",
           condition: phoneData.condition || "EXCELLENT",
@@ -389,7 +391,7 @@ export default function PhonesPage() {
           color: phoneData.color || "",
           price: phoneData.price ? Number(phoneData.price) : 0,
           notes: phoneData.notes || "",
-        } as PhoneDtoCustom);
+        } as any);
         
         toast({
           title: "Téléphone modifié",
@@ -400,7 +402,8 @@ export default function PhonesPage() {
         await phoneApi.createPhone({
           brand: phoneData.brand || "",
           model: phoneData.model || "",
-          imei: phoneData.imei || "",
+          imei1: phoneData.imei1 || "",
+          imei2: phoneData.imei2 || "",
           serialNumber: phoneData.serialNumber || "",
           status: phoneData.status || "AVAILABLE",
           condition: phoneData.condition || "EXCELLENT",
@@ -408,7 +411,7 @@ export default function PhonesPage() {
           color: phoneData.color || "",
           price: phoneData.price ? Number(phoneData.price) : 0,
           notes: phoneData.notes || "",
-        } as PhoneDtoCustom);
+        } as any);
         
         toast({
           title: "Téléphone ajouté",
@@ -704,7 +707,8 @@ export default function PhonesPage() {
     { key: "status", label: "Statut" },
     { key: "condition", label: "État" },
     { key: "serialNumber", label: "N° Série" },
-    { key: "imei", label: "IMEI" },
+    { key: "imei1", label: "IMEI 1" },
+    { key: "imei2", label: "IMEI 2" },
     { key: "storage", label: "Stockage" },
     { key: "color", label: "Couleur" },
     { key: "price", label: "Prix" },
@@ -938,6 +942,12 @@ export default function PhonesPage() {
                         </div>
                       )
                     }
+                    if (key === "imei1") {
+                      return <span className="text-xs font-mono">{phone.imei1}</span>
+                    }
+                    if (key === "imei2") {
+                      return <span className="text-xs font-mono text-gray-500">{phone.imei2 || "-"}</span>
+                    }
                     return phone[key as keyof PhoneData] || "-"
                   }}
                 />
@@ -977,7 +987,8 @@ export default function PhonesPage() {
               <div className="bg-gray-50 rounded-lg p-3">
                 <p className="font-medium text-gray-900">{phoneToDelete.brand} {phoneToDelete.model}</p>
                 <p className="text-sm text-gray-600">N° Série: {phoneToDelete.serialNumber}</p>
-                <p className="text-sm text-gray-600">IMEI: {phoneToDelete.imei}</p>
+                <p className="text-sm text-gray-600">IMEI 1: {phoneToDelete.imei1}</p>
+                {phoneToDelete.imei2 && <p className="text-sm text-gray-600">IMEI 2: {phoneToDelete.imei2}</p>}
               </div>
             </div>
             

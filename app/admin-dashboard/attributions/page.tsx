@@ -35,7 +35,8 @@ interface Attribution {
   phoneId?: string
   phoneModel?: string
   phoneBrand?: string
-  phoneImei?: string
+  phoneImei1?: string
+  phoneImei2?: string
   simCardId?: string
   simCardNumber?: string
   assignedBy: string
@@ -148,7 +149,6 @@ export default function AttributionsPage() {
         }
 
         if (phonesRes.status === 'fulfilled') {
-          console.log("Phones API success. Raw data:", phonesRes.value.data);
           phonesList = (phonesRes.value.data as any).phones || 
                        (phonesRes.value.data as any).data?.phones || 
                        (phonesRes.value.data as any).content ||
@@ -215,7 +215,8 @@ export default function AttributionsPage() {
           phoneId: a.phoneId ? String(a.phoneId) : undefined,
           phoneModel: a.phoneModel || phone?.model || "N/A",
           phoneBrand: a.phoneBrand || phone?.brand || undefined,
-          phoneImei: a.phoneImei || phone?.imei || "N/A",
+          phoneImei1: a.phoneImei1 || phone?.imei1 || "N/A",
+          phoneImei2: a.phoneImei2 || phone?.imei2 || undefined,
           simCardId: a.simCardId ? String(a.simCardId) : undefined,
           simCardNumber: a.simCardNumber || undefined,
           assignedBy: a.assignedByName || "",
@@ -797,11 +798,12 @@ export default function AttributionsPage() {
                   <Button
                     className="bg-emerald-600 hover:bg-emerald-700 text-white"
                     onClick={async () => {
-                      let imei = lastCreatedAttribution.phoneImei;
+                      let imei1 = lastCreatedAttribution.phoneImei1;
+                      let imei2 = lastCreatedAttribution.phoneImei2;
                       let brand = lastCreatedAttribution.phoneBrand;
                       
                       // Try to fetch phone details if needed
-                      if ((!imei || !brand) && lastCreatedAttribution.phoneId) {
+                      if ((!imei1 || !brand) && lastCreatedAttribution.phoneId) {
                         try {
                           const token = localStorage.getItem("jwt_token");
                           if (token) {
@@ -809,7 +811,8 @@ export default function AttributionsPage() {
                             const phoneRes = await phoneApi.getPhoneById(Number(lastCreatedAttribution.phoneId));
                             const pObj = (phoneRes.data as any)?.phone || (phoneRes.data as any)?.data?.phone || (phoneRes.data as any)?.data || phoneRes.data;
                             if (pObj) {
-                              imei = pObj.imei;
+                              imei1 = pObj.imei1 || pObj.imei;
+                              imei2 = pObj.imei2;
                               brand = pObj.brand;
                             }
                           }
@@ -826,7 +829,8 @@ export default function AttributionsPage() {
                         hierarchicalManagerFunction: (lastCreatedAttribution as any).hierarchicalManagerFunction,
                         phoneModel: lastCreatedAttribution.phoneModel,
                         phoneBrand: brand,
-                        phoneImei: imei,
+                        phoneImei1: imei1,
+                        phoneImei2: imei2,
                         simCardNumber: lastCreatedAttribution.simCardNumber,
                         assignedBy: lastCreatedAttribution.assignedBy,
                         assignmentDate: lastCreatedAttribution.assignmentDate,
@@ -919,10 +923,11 @@ export default function AttributionsPage() {
                             onClick={async (e) => {
                               e.stopPropagation()
                               
-                              let imei = attr.phoneImei;
+                              let imei1 = attr.phoneImei1;
+                              let imei2 = attr.phoneImei2;
                               let brand = attr.phoneBrand;
                               
-                              if ((!imei || imei === "N/A" || !brand || brand === "N/A") && attr.phoneId) {
+                              if ((!imei1 || imei1 === "N/A" || !brand || brand === "N/A") && attr.phoneId) {
                                 try {
                                   const token = localStorage.getItem("jwt_token");
                                   if (token) {
@@ -930,7 +935,8 @@ export default function AttributionsPage() {
                                     const phoneRes = await phoneApi.getPhoneById(Number(attr.phoneId));
                                     const pObj = (phoneRes.data as any)?.phone || (phoneRes.data as any)?.data?.phone || (phoneRes.data as any)?.data || phoneRes.data;
                                     if (pObj) {
-                                      imei = pObj.imei;
+                                      imei1 = pObj.imei1 || pObj.imei;
+                                      imei2 = pObj.imei2;
                                       brand = pObj.brand;
                                     }
                                   }
@@ -947,7 +953,8 @@ export default function AttributionsPage() {
                                 hierarchicalManagerFunction: attr.hierarchicalManagerFunction,
                                 phoneModel: attr.phoneModel,
                                 phoneBrand: brand,
-                                phoneImei: imei,
+                                phoneImei1: imei1,
+                                phoneImei2: imei2,
                                 simCardNumber: attr.simCardNumber,
                                 assignedBy: attr.assignedBy,
                                 assignmentDate: attr.assignmentDate,

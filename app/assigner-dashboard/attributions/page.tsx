@@ -63,8 +63,15 @@ interface Attribution {
   userId: string
   userName: string
   userEmail: string
+  userPhone?: string
+  userFunction?: string
+  hierarchicalManager?: string
+  hierarchicalManagerFunction?: string
   phoneId?: string
   phoneModel?: string
+  phoneBrand?: string
+  phoneImei1?: string
+  phoneImei2?: string
   simCardId?: string
   simCardNumber?: string
   assignedBy: string
@@ -130,7 +137,8 @@ export default function AssignerAttributionsPage() {
 
              const attributionApi = new AttributionManagementApi(getApiConfig(token))
        const simApi = new SIMCardManagementApi(getApiConfig(token))
-       const userApi = new UserManagementApi(getApiConfig(token))
+        const userApi = new UserManagementApi(getApiConfig(token))
+        const phoneApi = new PhoneManagementApi(getApiConfig(token))
       
       // Convert status filter to API format
       let statusParam: "ACTIVE" | "PENDING" | "RETURNED" | undefined
@@ -138,20 +146,19 @@ export default function AssignerAttributionsPage() {
         statusParam = statusFilter.toUpperCase() as "ACTIVE" | "PENDING" | "RETURNED"
       }
 
-      // Fetch regular attributions
-      const attributionRes = await attributionApi.getAttributions(
-        1,
-        10000,
-        undefined, // status - we'll filter client-side
-        undefined, // userId
-        undefined, // assignedBy
-        undefined // search - we'll filter client-side
-      )
+      // Fetch regular attributions, phones and SIMs in parallel
+      const [attributionRes, phonesRes, simsRes] = await Promise.all([
+        attributionApi.getAttributions(1, 10000),
+        phoneApi.getPhones(1, 1000),
+        simApi.getSimCards(1, 1000)
+      ])
 
       console.log("Attribution API Response:", attributionRes)
 
-      // Extract attribution data from response
+      // Extract data from responses
       let apiAttributions: any[] = []
+      let phones: any[] = []
+      let simCards: any[] = []
       let paginationData: any = {}
 
       if (attributionRes.data && typeof attributionRes.data === 'object') {
@@ -165,6 +172,16 @@ export default function AssignerAttributionsPage() {
           apiAttributions = (responseData.attributions as any[]) || []
           paginationData = responseData.pagination || {}
         }
+      }
+
+      // Extract phones
+      if (phonesRes.data) {
+        phones = (phonesRes.data as any).phones || (phonesRes.data as any).data?.phones || (Array.isArray(phonesRes.data) ? phonesRes.data : [])
+      }
+
+      // Extract sims
+      if (simsRes.data) {
+        simCards = (simsRes.data as any).simcards || (simsRes.data as any).simCards || (simsRes.data as any).data?.simcards || (simsRes.data as any).data?.simCards || (Array.isArray(simsRes.data) ? simsRes.data : [])
       }
 
              // Fetch direct SIM assignments (only if status filter is "all" or "ACTIVE")
@@ -257,23 +274,35 @@ export default function AssignerAttributionsPage() {
       console.log("Direct SIM assignments:", directSimAssignments)
       console.log("Pagination data:", paginationData)
 
-      // Transform attribution data to match our interface
-      const transformedAttributions: Attribution[] = apiAttributions.map((attr: any) => ({
-        id: attr.id?.toString() || "",
-        userId: attr.userId?.toString() || "",
-        userName: attr.userName || "",
-        userEmail: attr.userEmail || "",
-        phoneId: attr.phoneId?.toString(),
-        phoneModel: attr.phoneModel || "",
-        simCardId: attr.simCardId?.toString(),
-        simCardNumber: attr.simCardNumber || "",
-        assignedBy: attr.assignedByName || attr.assignedBy || "",
-        assignmentDate: attr.assignmentDate || "",
-        returnDate: attr.returnDate,
-        status: attr.status || "PENDING",
-        notes: attr.notes || "",
-      }))
-
+      // Map to internal Attribution interface
+        const processedAttributions: Attribution[] = apiAttributions.map((a: any) => {
+          const phone = phones.find((p: any) => p.id?.toString() === a.phoneId?.toString())
+          const sim = simCards.find((s: any) => s.id?.toString() === a.simCardId?.toString())
+          
+          return {
+            id: a.id?.toString() || "",
+            userId: a.userId?.toString() || "",
+            userName: a.userName || a.user?.name || "Utilisateur inconnu",
+            userEmail: a.userEmail || a.user?.email || "",
+            userPhone: a.userPhone || a.user?.phone || "",
+            userFunction: a.userFunction || a.user?.position || "",
+            hierarchicalManager: a.hierarchicalManager || a.user?.manager || "",
+            hierarchicalManagerFunction: a.hierarchicalManagerFunction || "",
+            phoneId: a.phoneId?.toString(),
+            phoneModel: a.phoneModel || phone?.model || "Standard",
+            phoneBrand: phone?.brand || "",
+            phoneImei1: a.phoneImei1 || phone?.imei1 || "",
+            phoneImei2: a.phoneImei2 || phone?.imei2 || "",
+            simCardId: a.simCardId?.toString(),
+            simCardNumber: a.simCardNumber || sim?.number || "",
+            assignedBy: a.assignedByName || "System",
+            assignmentDate: a.assignmentDate || new Date().toISOString().split('T')[0],
+            returnDate: a.returnDate,
+            status: a.status as any || "ACTIVE",
+            notes: a.notes || ""
+          }
+        })
+        
       // Transform direct SIM assignments to attribution format
       const transformedDirectAssignments: Attribution[] = directSimAssignments.map((sim: any) => ({
         id: `sim-${sim.id}`, // Use a prefix to distinguish from regular attributions
@@ -291,11 +320,10 @@ export default function AssignerAttributionsPage() {
         notes: "Attribution directe depuis la page Cartes SIM",
       }))
 
-      // Combine both types of assignments
-      const allAssignments = [...transformedAttributions, ...transformedDirectAssignments]
-
-      setAttributions(allAssignments)
-
+      // Merge everything together
+        const allAttributions = [...processedAttributions, ...transformedDirectAssignments]
+        setAttributions(allAttributions)
+        setFilteredAttributions(allAttributions)
       // Update pagination info (adjust for combined results)
       const totalItems = apiAttributions.length + directSimAssignments.length
       if (paginationData.total !== undefined) {
@@ -1020,8 +1048,9 @@ export default function AssignerAttributionsPage() {
                                   onClick={async (e) => {
                                     e.stopPropagation()
                                     
-                                    let imei = (attribution as any).phoneImei;
-                                    let brand = (attribution as any).phoneBrand;
+                                    let imei1 = attribution.phoneImei1;
+                                    let imei2 = attribution.phoneImei2;
+                                    let brand = attribution.phoneBrand;
                                     let position = (attribution as any).userFunction;
                                     let managerName = (attribution as any).hierarchicalManager;
                                     let managerPosition = (attribution as any).hierarchicalManagerFunction;
@@ -1029,12 +1058,13 @@ export default function AssignerAttributionsPage() {
                                     try {
                                       const token = localStorage.getItem("jwt_token");
                                       if (token) {
-                                        if ((!imei || !brand) && attribution.phoneId) {
+                                        if ((!imei1 || !brand || imei1 === "N/A" || brand === "N/A") && attribution.phoneId) {
                                           const phoneApi = new PhoneManagementApi(getApiConfig(token));
                                           const phoneRes = await phoneApi.getPhoneById(Number(attribution.phoneId));
                                           const pObj = (phoneRes.data as any)?.phone || (phoneRes.data as any)?.data?.phone || (phoneRes.data as any)?.data || phoneRes.data;
                                           if (pObj) {
-                                            imei = pObj.imei;
+                                            imei1 = pObj.imei1 || pObj.imei;
+                                            imei2 = pObj.imei2;
                                             brand = pObj.brand;
                                           }
                                         }
@@ -1066,7 +1096,8 @@ export default function AssignerAttributionsPage() {
                                       hierarchicalManagerFunction: managerPosition,
                                       phoneModel: attribution.phoneModel,
                                       phoneBrand: brand,
-                                      phoneImei: imei,
+                                      phoneImei1: imei1,
+                                      phoneImei2: imei2,
                                       simCardNumber: attribution.simCardNumber,
                                       assignedBy: attribution.assignedBy,
                                       assignmentDate: attribution.assignmentDate,
