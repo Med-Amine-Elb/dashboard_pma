@@ -40,6 +40,7 @@ interface PhoneData {
   assignedToName?: string
   assignedToDepartment?: string
   assignedDate?: string
+  remainingValue?: number
 }
 
 interface PhoneDtoCustom {
@@ -178,6 +179,7 @@ export default function PhonesPage() {
         assignedToName: p.assignedToName || "",
         assignedToDepartment: p.assignedToDepartment || "",
         assignedDate: p.assignedDate || "",
+        remainingValue: p.remainingValue || 0,
       }))
       
       console.log("Mapped phones:", mappedPhones)
@@ -504,10 +506,12 @@ export default function PhonesPage() {
         purchaseDate: p.purchaseDate ?? p.createdAt ?? "",
         condition: p.condition ?? "",
         serialNumber: p.serialNumber ?? "",
-        imei: p.imei ?? "",
+        imei1: p.imei1 ?? p.imei ?? "",
+        imei2: p.imei2 ?? "",
         storage: p.storage ?? "",
         color: p.color ?? "",
         price: p.price ?? 0,
+        remainingValue: p.remainingValue ?? 0,
         notes: p.notes ?? "",
         assignedTo: p.assignedTo ?? "",
         assignedToName: p.assignedToName ?? "",
@@ -543,10 +547,12 @@ export default function PhonesPage() {
         { header: 'Date d\'achat', key: 'purchaseDate', width: 15 },
         { header: 'État', key: 'condition', width: 12 },
         { header: 'N° Série', key: 'serialNumber', width: 18 },
-        { header: 'IMEI', key: 'imei', width: 20 },
+        { header: 'IMEI 1', key: 'imei1', width: 20 },
+        { header: 'IMEI 2', key: 'imei2', width: 20 },
         { header: 'Stockage', key: 'storage', width: 12 },
         { header: 'Couleur', key: 'color', width: 12 },
         { header: 'Prix (MAD)', key: 'price', width: 12 },
+        { header: 'Reste à payer (MAD)', key: 'remainingValue', width: 18 },
         { header: 'Assigné à', key: 'assignedToName', width: 20 },
         { header: 'Département', key: 'assignedToDepartment', width: 15 },
         { header: 'Date d\'assignation', key: 'assignedDate', width: 18 }
@@ -587,10 +593,12 @@ export default function PhonesPage() {
           purchaseDate: phone.purchaseDate,
           condition: phone.condition,
           serialNumber: phone.serialNumber,
-          imei: phone.imei,
+          imei1: phone.imei1,
+          imei2: phone.imei2,
           storage: phone.storage,
           color: phone.color,
           price: phone.price,
+          remainingValue: phone.remainingValue,
           assignedToName: phone.assignedToName || '-',
           assignedToDepartment: phone.assignedToDepartment || '-',
           assignedDate: phone.assignedDate || '-'
@@ -712,6 +720,7 @@ export default function PhonesPage() {
     { key: "storage", label: "Stockage" },
     { key: "color", label: "Couleur" },
     { key: "price", label: "Prix" },
+    { key: "remainingValue", label: "Reste à payer" },
     { key: "actions", label: "Actions" },
   ]
 
@@ -857,7 +866,19 @@ export default function PhonesPage() {
                       return <Badge className={getConditionColor(phone.condition)}>{phone.condition}</Badge>
                     }
                     if (key === "price") {
-                      return <span>{phone.price} MAD</span>
+                      return <span>{phone.price.toLocaleString()} MAD</span>
+                    }
+                    if (key === "remainingValue") {
+                      return (
+                        <div className="flex flex-col">
+                          <span className="font-bold text-blue-600">
+                            {phone.remainingValue?.toLocaleString()} MAD
+                          </span>
+                          {phone.status === "ASSIGNED" && (
+                            <span className="text-[10px] text-gray-400 italic font-medium">Valeur rachat</span>
+                          )}
+                        </div>
+                      )
                     }
                     if (key === "actions") {
                       return (
@@ -876,24 +897,21 @@ export default function PhonesPage() {
                                 const historyApi = new AssignmentHistoryApi(getApiConfig(token))
                                 const usersApi = new UserManagementApi(getApiConfig(token))
                                 const res = await historyApi.getPhoneHistory(parseInt(phone.id))
-                                const list: any[] = Array.isArray((res.data as any)?.data) ? (res.data as any).data : (res.data as any) || []
-                                const userIdSet = new Set<number>()
-                                ;(list as any[]).forEach((h: any) => {
-                                  if (h.toUserId) userIdSet.add(Number(h.toUserId))
-                                  if (h.fromUserId) userIdSet.add(Number(h.fromUserId))
-                                })
+                                
+                                // Fetch all users for ID mapping
+                                const usersRes = await usersApi.getUsers(1, 1000)
+                                const usersListData = (usersRes.data as any)?.data?.users || (usersRes.data as any)?.users || (usersRes.data as any)?.content || []
+                                
                                 const userIdToName = new Map<number, string>()
-                                await Promise.all(Array.from(userIdSet).map(async (uid) => {
-                                  try {
-                                    const ures = await usersApi.getUserById(uid)
-                                    const udata: any = (ures.data as any)?.data || (ures.data as any)
-                                    const name = udata?.name || udata?.fullName || udata?.username || `Utilisateur ${uid}`
-                                    userIdToName.set(uid, name)
-                                  } catch {
-                                    userIdToName.set(uid, `Utilisateur ${uid}`)
-                                  }
-                                }))
-                                const mapped = (list as any[]).map((h: any) => {
+                                if (Array.isArray(usersListData)) {
+                                  usersListData.forEach((u: any) => {
+                                    userIdToName.set(Number(u.id), u.name || u.fullName || u.username)
+                                  })
+                                }
+
+                                const listRaw = (res.data as any)?.data || (res.data as any) || []
+                                const list = Array.isArray(listRaw) ? listRaw : []
+                                const mapped = list.map((h: any) => {
                                   const action = String(h.action || "ASSIGN").toUpperCase()
                                   const isReturn = action === "UNASSIGN" || action === "RETURN"
                                   const toId = h.toUserId ? Number(h.toUserId) : undefined

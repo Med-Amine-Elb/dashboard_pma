@@ -43,6 +43,7 @@ interface Attribution {
   assignmentDate: string
   returnDate?: string
   status: "ACTIVE" | "RETURNED" | "PENDING"
+  phoneRemainingValue?: number
   notes?: string
 }
 
@@ -223,6 +224,7 @@ export default function AttributionsPage() {
           assignmentDate: a.assignmentDate || "",
           returnDate: a.returnDate || undefined,
           status: (a.status || "ACTIVE").toUpperCase(),
+          phoneRemainingValue: phone?.remainingValue || 0,
           notes: a.notes || undefined,
         }
       })
@@ -1029,6 +1031,14 @@ export default function AttributionsPage() {
                   {attributionToDelete.phoneModel && `Téléphone: ${attributionToDelete.phoneModel}`}
                   {attributionToDelete.simCardNumber && ` • SIM: ${attributionToDelete.simCardNumber}`}
                 </p>
+                {attributionToDelete.status === "ACTIVE" && attributionToDelete.phoneRemainingValue !== undefined && attributionToDelete.phoneRemainingValue > 0 && (
+                  <div className="mt-2 pt-2 border-t border-gray-200">
+                    <p className="text-xs text-blue-600 font-semibold uppercase tracking-wider">Information financière</p>
+                    <p className="text-sm text-gray-700">
+                      Reste à payer (Amortissement 24m) : <span className="font-bold text-blue-600">{attributionToDelete.phoneRemainingValue.toLocaleString()} MAD</span>
+                    </p>
+                  </div>
+                )}
               </div>
             </div>
             

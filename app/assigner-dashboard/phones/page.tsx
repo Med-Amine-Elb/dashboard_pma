@@ -45,6 +45,7 @@ interface PhoneDevice {
   storage: string
   color: string
   price: number
+  remainingValue?: number
   notes?: string
 }
 
@@ -200,6 +201,7 @@ export default function AssignerPhonesPage() {
          storage: phone.storage || "128GB",
          color: phone.color || "Standard",
          price: phone.price || 0,
+         remainingValue: phone.remainingValue || 0,
          notes: phone.notes || undefined,
        }))
 
@@ -352,6 +354,7 @@ export default function AssignerPhonesPage() {
     { key: "assignedTo", label: "Assigné à" },
     { key: "condition", label: "État" },
     { key: "price", label: "Prix" },
+    { key: "remainingValue", label: "Reste à payer" },
     { key: "purchaseDate", label: "Date d'achat" },
     { key: "actions", label: "Actions" },
   ]
@@ -458,6 +461,7 @@ export default function AssignerPhonesPage() {
         storage: p.storage ?? "",
         color: p.color ?? "",
         price: p.price ?? 0,
+        remainingValue: p.remainingValue ?? 0,
         notes: p.notes ?? "",
       }))
       
@@ -482,17 +486,20 @@ export default function AssignerPhonesPage() {
       }
       
              // Définir les colonnes avec largeurs (exactement comme affiché dans la page)
-       worksheet.columns = [
-         { header: 'Modèle', key: 'model', width: 20 },
-         { header: 'Marque', key: 'brand', width: 15 },
-         { header: 'Stockage', key: 'storage', width: 12 },
-         { header: 'Couleur', key: 'color', width: 12 },
-         { header: 'Statut', key: 'status', width: 12 },
-         { header: 'Assigné à', key: 'assignedTo', width: 20 },
-         { header: 'État', key: 'condition', width: 12 },
-         { header: 'Prix', key: 'price', width: 12 },
-         { header: 'Date d\'achat', key: 'purchaseDate', width: 15 }
-       ]
+        worksheet.columns = [
+          { header: 'Modèle', key: 'model', width: 20 },
+          { header: 'Marque', key: 'brand', width: 15 },
+          { header: 'IMEI 1', key: 'imei1', width: 20 },
+          { header: 'IMEI 2', key: 'imei2', width: 20 },
+          { header: 'Stockage', key: 'storage', width: 12 },
+          { header: 'Couleur', key: 'color', width: 12 },
+          { header: 'Statut', key: 'status', width: 12 },
+          { header: 'Assigné à', key: 'assignedTo', width: 20 },
+          { header: 'État', key: 'condition', width: 12 },
+          { header: 'Prix', key: 'price', width: 12 },
+          { header: 'Reste à payer', key: 'remainingValue', width: 18 },
+          { header: 'Date d\'achat', key: 'purchaseDate', width: 15 }
+        ]
       
       // Styliser l'en-tête
       const headerRow = worksheet.getRow(1)
@@ -525,12 +532,15 @@ export default function AssignerPhonesPage() {
         const row = worksheet.addRow({
           model: phone.model,
           brand: phone.brand,
+          imei1: phone.imei1,
+          imei2: phone.imei2,
           storage: phone.storage,
           color: phone.color,
           status: phone.status,
           assignedTo: phone.assignedTo || '-',
           condition: phone.condition,
           price: phone.price,
+          remainingValue: phone.remainingValue,
           purchaseDate: phone.purchaseDate
         })
         
@@ -798,6 +808,18 @@ export default function AssignerPhonesPage() {
                         if (key === "price") {
                           return <span>{phone.price.toLocaleString()} MAD</span>
                         }
+                        if (key === "remainingValue") {
+                          return (
+                            <div className="flex flex-col">
+                              <span className="font-bold text-blue-600">
+                                {phone.remainingValue?.toLocaleString()} MAD
+                              </span>
+                              {phone.status === "assigned" && (
+                                <span className="text-[10px] text-gray-400 italic">Valeur de rachat</span>
+                              )}
+                            </div>
+                          )
+                        }
                         if (key === "purchaseDate") {
                           return new Date(phone.purchaseDate).toLocaleDateString("fr-FR")
                         }
@@ -827,23 +849,20 @@ export default function AssignerPhonesPage() {
                                   const historyApi = new AssignmentHistoryApi(getApiConfig(token))
                                   const usersApi = new UserManagementApi(getApiConfig(token))
                                   const res = await historyApi.getPhoneHistory(parseInt(phone.id))
-                                  const list: any[] = Array.isArray((res.data as any)?.data) ? (res.data as any).data : (res.data as any) || []
-                                  const userIdSet = new Set<number>()
-                                  ;(list as any[]).forEach((h: any) => {
-                                    if (h.toUserId) userIdSet.add(Number(h.toUserId))
-                                    if (h.fromUserId) userIdSet.add(Number(h.fromUserId))
-                                  })
+                                  
+                                  // Fetch all users to create a mapping (more efficient than individual lookups)
+                                  const usersRes = await usersApi.getUsers(1, 1000)
+                                  const usersListData = (usersRes.data as any)?.data?.users || (usersRes.data as any)?.users || (usersRes.data as any)?.content || []
+                                  
                                   const userIdToName = new Map<number, string>()
-                                  await Promise.all(Array.from(userIdSet).map(async (uid) => {
-                                    try {
-                                      const ures = await usersApi.getUserById(uid)
-                                      const udata: any = (ures.data as any)?.data || (ures.data as any)
-                                      const name = udata?.name || udata?.fullName || udata?.username || `Utilisateur ${uid}`
-                                      userIdToName.set(uid, name)
-                                    } catch {
-                                      userIdToName.set(uid, `Utilisateur ${uid}`)
-                                    }
-                                  }))
+                                  if (Array.isArray(usersListData)) {
+                                    usersListData.forEach((u: any) => {
+                                      userIdToName.set(Number(u.id), u.name || u.fullName || u.username)
+                                    })
+                                  }
+
+                                  const listRaw = (res.data as any)?.data || (res.data as any) || []
+                                  const list = Array.isArray(listRaw) ? listRaw : []
 
                                   const mapped: AssignmentHistoryItem[] = (list as any[]).map((h: any) => {
                                     const action = String(h.action || "ASSIGN").toUpperCase()
